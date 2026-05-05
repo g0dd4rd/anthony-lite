@@ -363,7 +363,7 @@ def describe_desktop() -> str:
             messages=[
                 {
                     'role': 'system',
-                    'content': 'You are a screen reader. Answer directly without explaining your reasoning process.'
+                    'content': 'You are a screen reader for visually impaired users. Describe what you see in plain text without any formatting. Do not use markdown, asterisks, or special characters. Answer directly without explaining your reasoning process.'
                 },
                 {
                     'role': 'user',
@@ -1587,6 +1587,39 @@ print("[SYSTEM] Loading Neural Voice...")
 voice_model = PiperVoice.load("en_US-lessac-medium.onnx")
 print("[SYSTEM] Voice ready.")
 
+def strip_markdown(text: str) -> str:
+    """Remove markdown formatting from text for TTS.
+
+    Removes:
+    - Bold: **text** or __text__
+    - Italic: *text* or _text_
+    - Code: `text`
+    - Headers: # text
+    - Lists: - text, * text, 1. text
+    """
+    import re
+
+    # Remove bold (**text** or __text__)
+    text = re.sub(r'\*\*(.+?)\*\*', r'\1', text)
+    text = re.sub(r'__(.+?)__', r'\1', text)
+
+    # Remove italic (*text* or _text_) - be careful not to remove emphasis
+    text = re.sub(r'\*(.+?)\*', r'\1', text)
+    text = re.sub(r'_(.+?)_', r'\1', text)
+
+    # Remove inline code (`text`)
+    text = re.sub(r'`(.+?)`', r'\1', text)
+
+    # Remove headers (# text)
+    text = re.sub(r'^#+\s*', '', text, flags=re.MULTILINE)
+
+    # Remove list markers (- text, * text, 1. text)
+    text = re.sub(r'^\s*[-*]\s+', '', text, flags=re.MULTILINE)
+    text = re.sub(r'^\s*\d+\.\s+', '', text, flags=re.MULTILINE)
+
+    return text
+
+
 def speak(text: str):
     """Converts text to neural speech and plays it."""
     print(f"\n[Agent]: {text}")
@@ -1596,10 +1629,13 @@ def speak(text: str):
         print(f"[SYSTEM] ⚠️ Skipping TTS - empty text")
         return
 
+    # Strip markdown formatting for better TTS
+    clean_text = strip_markdown(text)
+
     temp_audio_path = "/tmp/agent_response.wav"
     try:
         with wave.open(temp_audio_path, "wb") as wav_file:
-            voice_model.synthesize_wav(text, wav_file)
+            voice_model.synthesize_wav(clean_text, wav_file)
         subprocess.run(["aplay", "-q", temp_audio_path], check=True)
     except Exception as e:
         print(f"[SYSTEM] Voice error: {e}")
