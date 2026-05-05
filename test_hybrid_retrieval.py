@@ -17,7 +17,7 @@ namespaces = {
         "tools": ["launch_application", "list_installed_applications"]
     },
     "file": {
-        "description": "Opening existing files by filename or path - PDFs, images, pictures, screenshots, documents, downloads. Searching for files in folders like Pictures, Documents, Downloads. Opening web URLs and websites.",
+        "description": "Opening files and web pages - visit websites, go to URLs, browse internet (google.com, amazon.com, github.com, seznam.cz). Open existing files by filename or path (PDFs, images, screenshots, documents). Search for files in folders (Pictures, Documents, Downloads).",
         "tools": ["open_file", "open_url", "search_files"]
     },
     "window": {
@@ -117,6 +117,9 @@ if __name__ == "__main__":
     # Test queries
     test_queries = [
         "open screenshot.png in pictures folder",
+        "go to amazon.com",
+        "visit github.com",
+        "browse to seznam.cz",
         "maximize firefox",
         "set volume to 50",
         "play next track",
