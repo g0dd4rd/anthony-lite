@@ -2091,6 +2091,8 @@ def run_agent():
                 # Build filtered tool schema with only relevant tools
                 filtered_tools = build_filtered_tool_schema(relevant_namespaces)
 
+                print(f"[TIMING] ⏱️  Calling gemma4 with {len(filtered_tools)} tools...")
+                llm_start_time = time.time()
                 response = ollama.chat(
                     model='gemma4:e4b',
                     messages=command_messages,
@@ -2102,6 +2104,14 @@ def run_agent():
                         'num_predict': 200  # Limit tokens - function calls are short (<100 tokens)
                     }
                 )
+                llm_elapsed = time.time() - llm_start_time
+                print(f"[TIMING] ⏱️  Gemma inference took: {llm_elapsed:.2f}s")
+
+                # Debug: Check what gemma actually generated
+                print(f"[DEBUG] Gemma eval_count: {response.get('eval_count', 'N/A')} tokens")
+                print(f"[DEBUG] Response content length: {len(response['message'].get('content', ''))}")
+                if response['message'].get('content'):
+                    print(f"[DEBUG] Content preview: {response['message']['content'][:200]}")
 
                 message = response['message']
                 command_messages.append(message)
