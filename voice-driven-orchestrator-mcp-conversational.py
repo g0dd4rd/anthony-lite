@@ -17,6 +17,12 @@ Features:
 
 import os
 import sys
+
+# Force offline mode for sentence-transformers BEFORE import
+# This prevents internet checks to HuggingFace Hub
+os.environ['TRANSFORMERS_OFFLINE'] = '1'
+os.environ['HF_HUB_OFFLINE'] = '1'
+
 import ollama
 import sounddevice
 import pyaudio
@@ -1461,11 +1467,9 @@ namespaces = {
     }
 }
 
-# Load embedding model for semantic retrieval (offline mode)
+# Load embedding model for semantic retrieval (offline mode set at import time)
 print("[SYSTEM] Loading embedding model for tool retrieval...")
-os.environ['TRANSFORMERS_OFFLINE'] = '1'  # Force offline mode - no internet checks
-os.environ['HF_HUB_OFFLINE'] = '1'  # Disable HuggingFace Hub access
-embedding_model = SentenceTransformer('all-MiniLM-L6-v2', device='cpu')  # Use cached model only
+embedding_model = SentenceTransformer('all-MiniLM-L6-v2', device='cpu')  # Uses cached model only
 
 # Pre-compute namespace embeddings
 namespace_names = list(namespaces.keys())
