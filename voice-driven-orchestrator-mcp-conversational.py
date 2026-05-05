@@ -365,7 +365,7 @@ def describe_desktop() -> str:
         print(f"[SYSTEM] ⏳ Please wait...")
 
         response = ollama.chat(
-            model='gemma4:e4b',
+            model='llama3.2-vision:11b',
             messages=[
                 {
                     'role': 'system',
@@ -2048,9 +2048,12 @@ def run_agent():
             if not user_input:
                 continue
 
+            # Start timing from when user input is captured
+            response_start_time = time.time()
+
             user_input_lower = user_input.lower()
 
-            # Check for explicit mode switching
+            # Check for explicit mode switching (these don't need timing - just mode control)
             if 'switch to command mode' in user_input_lower or 'command mode' in user_input_lower:
                 current_mode = 'command'
                 speak("Command mode activated. I'll only execute desktop commands.")
@@ -2135,6 +2138,8 @@ def run_agent():
                                     result = f"Error: {health_msg}"
 
                             print(f"\n[OS Feedback]: {result}")
+                            response_time = time.time() - response_start_time
+                            print(f"[TIMING] ⏱️  Response time: {response_time:.2f}s")
                             speak(result)
                             command_messages = [command_system_msg]
 
@@ -2154,16 +2159,22 @@ def run_agent():
                                     result = f"Error: {health_msg}"
 
                             print(f"\n[OS Feedback]: {result}")
+                            response_time = time.time() - response_start_time
+                            print(f"[TIMING] ⏱️  Response time: {response_time:.2f}s")
                             speak(result)
                             command_messages = [command_system_msg]
 
                         else:
                             print(f"[COMMAND] ⚠️  Unknown tool: {tool_name}")
+                            response_time = time.time() - response_start_time
+                            print(f"[TIMING] ⏱️  Response time: {response_time:.2f}s")
                             speak(f"I don't know how to use {tool_name}")
                             command_messages = [command_system_msg]
                 else:
                     # No tool call generated
                     print("[COMMAND] ⚠️  No tool call generated. Try rephrasing or switch to chat mode.")
+                    response_time = time.time() - response_start_time
+                    print(f"[TIMING] ⏱️  Response time: {response_time:.2f}s")
                     speak("I'm not sure what command to run. Try rephrasing or say 'switch to chat mode'.")
 
             else:  # intent_type == 'conversation'
@@ -2173,6 +2184,8 @@ def run_agent():
                 answer, conversation_history = handle_conversation(user_input, conversation_history)
 
                 print(f"\n[Agent]: {answer}")
+                response_time = time.time() - response_start_time
+                print(f"[TIMING] ⏱️  Response time: {response_time:.2f}s")
                 speak(answer)
 
     except KeyboardInterrupt:
