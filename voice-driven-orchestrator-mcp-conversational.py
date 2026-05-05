@@ -1362,9 +1362,7 @@ def drag_item(from_position: str = "center", to_position: str = "center",
 
 # Available tools (custom wrappers)
 available_tools = {
-    "launch_application": launch_application,
     "describe_desktop": describe_desktop,
-    "list_installed_applications": list_installed_applications,
     "list_open_windows": list_open_windows,
     "focus_window_by_name": focus_window_by_name,
     "close_window_by_name": close_window_by_name,
@@ -1394,14 +1392,12 @@ available_tools = {
     "toggle_do_not_disturb": toggle_do_not_disturb,
     "toggle_wifi": toggle_wifi,
     "toggle_bluetooth": toggle_bluetooth,
-    "open_file": open_file,
-    "open_url": open_url,
-    "search_files": search_files,
     "set_wallpaper": set_wallpaper,
 }
 
 # Direct MCP tools (forwarded directly without wrappers)
 direct_mcp_tools = [
+    "gnome_search",      # GNOME search overlay - find and open apps/files/settings
     "key_press",         # Press single key - simple passthrough
     "mouse_click",       # Click at screen coordinates - simple passthrough
     "mouse_double_click", # Double-click at screen coordinates - simple passthrough
@@ -1533,9 +1529,8 @@ def build_filtered_tool_schema(relevant_namespaces: list) -> list:
 # Full tool schema (all 43 tools)
 # This will be filtered dynamically based on user input
 tool_schema_full = [
-{"type": "function", "function": {"name": "launch_application", "description": "Launches a graphical application on the Linux desktop.", "parameters": {"type": "object", "properties": {"app_name": {"type": "string", "description": "The command name of the app"}}, "required": ["app_name"]}}},
+{"type": "function", "function": {"name": "gnome_search", "description": "Use GNOME search to find and open apps, files, or settings. Opens Activities search, types the query, and presses Enter. GNOME finds and opens the best match automatically. Extract just the app name, file name, or domain from user input.", "parameters": {"type": "object", "properties": {"query": {"type": "string", "description": "Just the app name, file name, or domain. Examples: 'firefox', 'text editor', 'screenshot.png', 'amazon.com', 'wifi'"}}, "required": ["query"]}}},
 {"type": "function", "function": {"name": "describe_desktop", "description": "Captures a screenshot of the desktop and describes what is visible using AI vision.", "parameters": {"type": "object", "properties": {}}}},
-{"type": "function", "function": {"name": "list_installed_applications", "description": "Lists all installed GUI applications available on the Linux system.", "parameters": {"type": "object", "properties": {}}}},
 {"type": "function", "function": {"name": "list_open_windows", "description": "Lists all currently open windows on the desktop.", "parameters": {"type": "object", "properties": {}}}},
 {"type": "function", "function": {"name": "focus_window_by_name", "description": "Focus and bring to front a window. Can match by application name (e.g. 'text editor', 'firefox'). If window_name is empty, focuses the current window.", "parameters": {"type": "object", "properties": {"window_name": {"type": "string", "description": "Application name or part of window title (e.g., 'text editor', 'firefox'). Leave empty to use current window.", "default": ""}}, "required": []}}},
 {"type": "function", "function": {"name": "close_window_by_name", "description": "Safely close a window. Matches by application name (e.g., 'text editor'). If window_name is empty, closes the current window. If unsaved changes exist, asks user via voice what to do (Save, Discard, Cancel).", "parameters": {"type": "object", "properties": {"window_name": {"type": "string", "description": "Application name or part of window title (e.g., 'text editor', 'firefox'). Leave empty to use current window.", "default": ""}}, "required": []}}},
@@ -1556,9 +1551,6 @@ tool_schema_full = [
 {"type": "function", "function": {"name": "toggle_wifi", "description": "Enable or disable WiFi. Use for 'turn on wifi', 'turn off wifi', 'enable wifi', 'disable wifi', 'wifi on', 'wifi off'.", "parameters": {"type": "object", "properties": {"enabled": {"type": "boolean", "description": "true to enable WiFi, false to disable"}}, "required": ["enabled"]}}},
 {"type": "function", "function": {"name": "toggle_bluetooth", "description": "Enable or disable Bluetooth. Use for 'turn on bluetooth', 'turn off bluetooth', 'enable bluetooth', 'disable bluetooth', 'bluetooth on', 'bluetooth off'.", "parameters": {"type": "object", "properties": {"enabled": {"type": "boolean", "description": "true to enable Bluetooth, false to disable"}}, "required": ["enabled"]}}},
 {"type": "function", "function": {"name": "set_wallpaper", "description": "Set desktop wallpaper/background image. Smart search: use color names (red, blue, green, orange, purple, gray, black) OR wallpaper names (fedora, adwaita, amber) OR file paths. Use for 'change background to red', 'set wallpaper blue', 'change wallpaper to fedora', 'set wallpaper ~/Pictures/sunset.jpg'.", "parameters": {"type": "object", "properties": {"image_path": {"type": "string", "description": "Color name (red, blue, green), wallpaper name (fedora, amber), or file path (/home/user/Pictures/photo.jpg, ~/Pictures/sunset.png)"}}, "required": ["image_path"]}}},
-{"type": "function", "function": {"name": "open_file", "description": "Smart file opener - opens files with automatic search. Give it a full path (~/Documents/report.pdf) OR just a filename (screenshot.png) and it will search for it. Optionally specify search_location (Pictures, Documents, Downloads, etc.) to narrow the search. Use for 'open screenshot.png', 'open screenshot in pictures', 'open ~/Documents/report.pdf'. DO NOT use for URLs - use open_url instead.", "parameters": {"type": "object", "properties": {"path": {"type": "string", "description": "File path or filename. Full path (~/Documents/file.pdf) opens directly. Filename (screenshot.png) triggers automatic search."}, "search_location": {"type": "string", "description": "Optional folder to search in: Pictures, Documents, Downloads, Music, Videos, Desktop. Only used when path is a filename.", "default": ""}}, "required": ["path"]}}},
-{"type": "function", "function": {"name": "open_url", "description": "Open a URL in the default web browser. Automatically adds https:// if not present. Use for 'open google.com', 'go to github.com', 'open https://example.com'.", "parameters": {"type": "object", "properties": {"url": {"type": "string", "description": "URL to open. Can be with or without protocol (google.com or https://google.com)"}}, "required": ["url"]}}},
-{"type": "function", "function": {"name": "search_files", "description": "Search for files using GNOME file indexing. Returns JSON list of matching file paths. Use for explicit search queries: 'find all PDFs', 'search for screenshots', 'where are my tax documents'. For simple 'open X' commands, use open_file instead (it searches automatically).", "parameters": {"type": "object", "properties": {"query": {"type": "string", "description": "Search term - filename, keyword, or content"}, "file_type": {"type": "string", "description": "Type: files, folders, images, videos, documents, audio, music_albums, music_artists, software", "default": "files"}, "limit": {"type": "integer", "description": "Max results (1-50)", "default": 10}}, "required": ["query"]}}},
 {"type": "function", "function": {"name": "maximize_window_by_name", "description": "Toggle maximize/restore for a window. Matches by application name (e.g., 'text editor'). If window_name is empty, uses the current window. If already maximized, restores to original size. If not maximized, makes it full-screen.", "parameters": {"type": "object", "properties": {"window_name": {"type": "string", "description": "Application name (e.g., 'text editor', 'firefox'). Leave empty to use current window.", "default": ""}}, "required": []}}},
 {"type": "function", "function": {"name": "minimize_window_by_name", "description": "Minimize (hide) a window. Matches by application name (e.g., 'text editor'). If window_name is empty, uses the current window.", "parameters": {"type": "object", "properties": {"window_name": {"type": "string", "description": "Application name (e.g., 'text editor', 'firefox'). Leave empty to use current window.", "default": ""}}, "required": []}}},
 {"type": "function", "function": {"name": "restore_window_by_name", "description": "Restore a window to normal state. Works for both minimized and maximized windows - brings them back to regular size and visibility. Matches by application name (e.g., 'text editor'). If window_name is empty, uses the current window.", "parameters": {"type": "object", "properties": {"window_name": {"type": "string", "description": "Application name (e.g., 'text editor', 'firefox'). Leave empty to use current window.", "default": ""}}, "required": []}}},
