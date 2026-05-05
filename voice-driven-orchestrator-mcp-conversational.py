@@ -4,15 +4,21 @@ Voice-Driven Desktop Orchestrator with CONVERSATIONAL Mode
 
 Features:
 - ✅ VAD continuous listening
-- ✅ Fast vision analysis (gemma4 + concise)
+- ✅ Configurable AI models (granite, gemma4, etc.)
+- ✅ Vision support for screen analysis
+- ✅ Tool calling for desktop automation
 - ✅ SAFE close handling with dialog detection
 - ✅ Reads dialog options to user via voice
 - ✅ Waits for user's voice choice
 - ✅ Verifies action succeeded
 - ✅ Never loses user data without explicit consent
-- ⭐ NEW: Conversation mode - chat with Gemma for questions/help
-- ⭐ NEW: Automatic intent detection - seamlessly switches between command & chat
-- ⭐ NEW: Explicit mode control - force command/chat mode when needed
+- ⭐ Conversation mode - chat with AI for questions/help
+- ⭐ Automatic intent detection - seamlessly switches between command & chat
+- ⭐ Explicit mode control - force command/chat mode when needed
+- ⭐ Easy model configuration - change models at top of file
+
+Configuration:
+To change models, edit the MODEL CONFIGURATION section (lines 48-71)
 """
 
 import os
@@ -43,6 +49,36 @@ from piper.voice import PiperVoice
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from dialog_handler import DialogHandler
+
+# ========================================
+# 🎯 MODEL CONFIGURATION
+# ========================================
+# Change models here - use models that support vision + tool calling
+#
+# Available models (tested):
+#   • granite3.2-vision:latest - 2.4GB, 2-3x faster, supports vision + tools ⭐ RECOMMENDED
+#   • gemma4:e4b              - 9.6GB, slower but stable, supports vision + tools
+#
+# For best performance:
+#   1. Use granite3.2-vision for everything (fastest)
+#   2. Or use granite for commands, keep gemma4 for vision only
+# ========================================
+
+# Model for command mode (tool calling)
+COMMAND_MODEL = 'granite3.2-vision:latest'  # Change to 'gemma4:e4b' if needed
+
+# Model for vision tasks (describe_desktop)
+VISION_MODEL = 'granite3.2-vision:latest'   # Change to 'gemma4:e4b' if needed
+
+# Model for conversation mode (chat/questions)
+CONVERSATION_MODEL = 'granite3.2-vision:latest'  # Change to 'gemma4:e4b' if needed
+
+# Model for intent classification (command vs chat detection)
+CLASSIFIER_MODEL = 'granite3.2-vision:latest'  # Change to 'gemma4:e4b' if needed
+
+# ========================================
+# End of configuration
+# ========================================
 
 # ----------------------------------------
 # MCP Client Setup
@@ -365,7 +401,7 @@ def describe_desktop() -> str:
         print(f"[SYSTEM] ⏳ Please wait...")
 
         response = ollama.chat(
-            model='gemma4:e4b',
+            model=VISION_MODEL,
             messages=[
                 {
                     'role': 'system',
@@ -1902,7 +1938,7 @@ Reply with ONE word only: command or conversation"""
 
     try:
         response = ollama.chat(
-            model='gemma4:e4b',
+            model=CLASSIFIER_MODEL,
             messages=[{'role': 'user', 'content': classifier_prompt}],
             options={
                 'num_predict': 10,
@@ -1952,10 +1988,10 @@ Be friendly and informative."""
     try:
         print(f"[CHAT] Generating response...")
         response = ollama.chat(
-            model='gemma4:e4b',
+            model=CONVERSATION_MODEL,
             messages=messages,
             options={
-                # No num_predict limit - let Gemma stop naturally
+                # No num_predict limit - let model stop naturally
                 # Prompt already asks for concise responses (3 sentences)
                 'temperature': 0.7,
                 'num_ctx': 2048
@@ -2091,10 +2127,10 @@ def run_agent():
                 # Build filtered tool schema with only relevant tools
                 filtered_tools = build_filtered_tool_schema(relevant_namespaces)
 
-                print(f"[TIMING] ⏱️  Calling gemma4 with {len(filtered_tools)} tools...")
+                print(f"[TIMING] ⏱️  Calling {COMMAND_MODEL} with {len(filtered_tools)} tools...")
                 llm_start_time = time.time()
                 response = ollama.chat(
-                    model='gemma4:e4b',
+                    model=COMMAND_MODEL,
                     messages=command_messages,
                     tools=filtered_tools,  # Use filtered tools instead of all 43
                     keep_alive=-1,
@@ -2105,7 +2141,7 @@ def run_agent():
                     }
                 )
                 llm_elapsed = time.time() - llm_start_time
-                print(f"[TIMING] ⏱️  Gemma inference took: {llm_elapsed:.2f}s")
+                print(f"[TIMING] ⏱️  LLM inference took: {llm_elapsed:.2f}s")
 
                 # Debug: Check what gemma actually generated
                 print(f"[DEBUG] Gemma eval_count: {response.get('eval_count', 'N/A')} tokens")
