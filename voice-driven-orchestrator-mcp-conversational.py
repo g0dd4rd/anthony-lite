@@ -1996,6 +1996,10 @@ def run_agent():
     conversation_history = []
     command_messages = [command_system_msg]
 
+    # Notify user that system is ready
+    print("[SYSTEM] ✓ Voice orchestrator ready")
+    speak("Voice orchestrator ready. Listening for commands.")
+
     try:
         while True:
             user_input = listen_and_transcribe()
