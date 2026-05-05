@@ -904,6 +904,15 @@ def search_files(query: str, file_type: str = "files", limit: int = 10) -> str:
     except Exception as e:
         return f"Error searching: {str(e)}"
 
+def set_wallpaper(image_path: str) -> str:
+    """Set desktop wallpaper/background image."""
+    print(f"\n[SYSTEM] Setting wallpaper: {image_path}...")
+    try:
+        result = mcp_client.call_tool("set_wallpaper", {"image_path": image_path})
+        return result
+    except Exception as e:
+        return f"Error setting wallpaper: {str(e)}"
+
 def maximize_window_by_name(window_name: str = "") -> str:
     """Toggle maximize/restore for a window. If empty, maximizes the currently focused window."""
     if window_name:
@@ -1382,6 +1391,7 @@ available_tools = {
     "open_file": open_file,
     "open_url": open_url,
     "search_files": search_files,
+    "set_wallpaper": set_wallpaper,
 }
 
 # Direct MCP tools (forwarded directly without wrappers)
@@ -1437,9 +1447,9 @@ namespaces = {
         "tools": ["media_play", "media_pause", "media_play_pause", "media_next", "media_previous", "media_stop"]
     },
     "settings": {
-        "description": "System settings - dark mode, light mode, night light, notifications, do not disturb, WiFi, Bluetooth, quick settings toggles",
+        "description": "System settings - dark mode, light mode, night light, notifications, do not disturb, WiFi, Bluetooth, wallpaper, background image, quick settings toggles",
         "tools": ["toggle_dark_mode", "toggle_night_light", "toggle_do_not_disturb",
-                  "toggle_wifi", "toggle_bluetooth"]
+                  "toggle_wifi", "toggle_bluetooth", "set_wallpaper"]
     },
     "vision": {
         "description": "Analyzing current screen content, describing what's visible on desktop right now, color picking from display, monitor configuration. Not for opening files.",
@@ -1543,6 +1553,7 @@ tool_schema_full = [
 {"type": "function", "function": {"name": "toggle_do_not_disturb", "description": "Enable or disable Do Not Disturb mode (blocks notifications). Use for 'turn on do not disturb', 'turn off do not disturb', 'enable DND', 'disable DND', 'silence notifications', 'allow notifications'.", "parameters": {"type": "object", "properties": {"enabled": {"type": "boolean", "description": "true to enable DND (block notifications), false to disable DND (allow notifications)"}}, "required": ["enabled"]}}},
 {"type": "function", "function": {"name": "toggle_wifi", "description": "Enable or disable WiFi. Use for 'turn on wifi', 'turn off wifi', 'enable wifi', 'disable wifi', 'wifi on', 'wifi off'.", "parameters": {"type": "object", "properties": {"enabled": {"type": "boolean", "description": "true to enable WiFi, false to disable"}}, "required": ["enabled"]}}},
 {"type": "function", "function": {"name": "toggle_bluetooth", "description": "Enable or disable Bluetooth. Use for 'turn on bluetooth', 'turn off bluetooth', 'enable bluetooth', 'disable bluetooth', 'bluetooth on', 'bluetooth off'.", "parameters": {"type": "object", "properties": {"enabled": {"type": "boolean", "description": "true to enable Bluetooth, false to disable"}}, "required": ["enabled"]}}},
+{"type": "function", "function": {"name": "set_wallpaper", "description": "Set desktop wallpaper/background image. Works with full paths, tilde paths (~), or relative paths from home. Supports JPG, PNG, SVG, WEBP, JXL. Use for 'set wallpaper to ~/Pictures/sunset.jpg', 'change background to nature.png', 'set wallpaper Pictures/beach.jpg'.", "parameters": {"type": "object", "properties": {"image_path": {"type": "string", "description": "Path to image file. Examples: '/home/user/Pictures/photo.jpg', '~/Pictures/sunset.png', 'Pictures/nature.jpg'"}}, "required": ["image_path"]}}},
 {"type": "function", "function": {"name": "open_file", "description": "Smart file opener - opens files with automatic search. Give it a full path (~/Documents/report.pdf) OR just a filename (screenshot.png) and it will search for it. Optionally specify search_location (Pictures, Documents, Downloads, etc.) to narrow the search. Use for 'open screenshot.png', 'open screenshot in pictures', 'open ~/Documents/report.pdf'. DO NOT use for URLs - use open_url instead.", "parameters": {"type": "object", "properties": {"path": {"type": "string", "description": "File path or filename. Full path (~/Documents/file.pdf) opens directly. Filename (screenshot.png) triggers automatic search."}, "search_location": {"type": "string", "description": "Optional folder to search in: Pictures, Documents, Downloads, Music, Videos, Desktop. Only used when path is a filename.", "default": ""}}, "required": ["path"]}}},
 {"type": "function", "function": {"name": "open_url", "description": "Open a URL in the default web browser. Automatically adds https:// if not present. Use for 'open google.com', 'go to github.com', 'open https://example.com'.", "parameters": {"type": "object", "properties": {"url": {"type": "string", "description": "URL to open. Can be with or without protocol (google.com or https://google.com)"}}, "required": ["url"]}}},
 {"type": "function", "function": {"name": "search_files", "description": "Search for files using GNOME file indexing. Returns JSON list of matching file paths. Use for explicit search queries: 'find all PDFs', 'search for screenshots', 'where are my tax documents'. For simple 'open X' commands, use open_file instead (it searches automatically).", "parameters": {"type": "object", "properties": {"query": {"type": "string", "description": "Search term - filename, keyword, or content"}, "file_type": {"type": "string", "description": "Type: files, folders, images, videos, documents, audio, music_albums, music_artists, software", "default": "files"}, "limit": {"type": "integer", "description": "Max results (1-50)", "default": 10}}, "required": ["query"]}}},
