@@ -4,19 +4,31 @@ Voice-Driven Desktop Orchestrator with CONVERSATIONAL Mode
 
 Features:
 - ✅ VAD continuous listening
-- ✅ Fast vision analysis (gemma4 + concise)
+- ✅ Configurable AI models (granite, gemma4, etc.)
+- ✅ Vision support for screen analysis
+- ✅ Tool calling for desktop automation
 - ✅ SAFE close handling with dialog detection
 - ✅ Reads dialog options to user via voice
 - ✅ Waits for user's voice choice
 - ✅ Verifies action succeeded
 - ✅ Never loses user data without explicit consent
-- ⭐ NEW: Conversation mode - chat with Gemma for questions/help
-- ⭐ NEW: Automatic intent detection - seamlessly switches between command & chat
-- ⭐ NEW: Explicit mode control - force command/chat mode when needed
+- ⭐ Conversation mode - chat with AI for questions/help
+- ⭐ Automatic intent detection - seamlessly switches between command & chat
+- ⭐ Explicit mode control - force command/chat mode when needed
+- ⭐ Easy model configuration - change models at top of file
+
+Configuration:
+To change models, edit the MODEL CONFIGURATION section (lines 48-71)
 """
 
 import os
 import sys
+
+# Force offline mode for sentence-transformers BEFORE import
+# This prevents internet checks to HuggingFace Hub
+os.environ['TRANSFORMERS_OFFLINE'] = '1'
+os.environ['HF_HUB_OFFLINE'] = '1'
+
 import ollama
 import sounddevice
 import pyaudio
@@ -30,12 +42,43 @@ import collections
 import numpy as np
 import torch
 from queue import Queue
+from sentence_transformers import SentenceTransformer
 
 from faster_whisper import WhisperModel
 from piper.voice import PiperVoice
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from dialog_handler import DialogHandler
+
+# ========================================
+# 🎯 MODEL CONFIGURATION
+# ========================================
+# Change models here - use models that support vision + tool calling
+#
+# Available models (tested):
+#   • granite3.2-vision:latest - 2.4GB, 2-3x faster, supports vision + tools ⭐ RECOMMENDED
+#   • gemma4:e4b              - 9.6GB, slower but stable, supports vision + tools
+#
+# For best performance:
+#   1. Use granite3.2-vision for everything (fastest)
+#   2. Or use granite for commands, keep gemma4 for vision only
+# ========================================
+
+# Model for command mode (tool calling)
+COMMAND_MODEL = 'gemma4:e4b'  # Change to 'gemma4:e4b' if needed
+
+# Model for vision tasks (describe_desktop)
+VISION_MODEL = 'gemma4:e4b'   # Change to 'gemma4:e4b' if needed
+
+# Model for conversation mode (chat/questions)
+CONVERSATION_MODEL = 'gemma4:e4b'  # Change to 'gemma4:e4b' if needed
+
+# Model for intent classification (command vs chat detection)
+CLASSIFIER_MODEL = 'gemma4:e4b'  # Change to 'gemma4:e4b' if needed
+
+# ========================================
+# End of configuration
+# ========================================
 
 # ----------------------------------------
 # MCP Client Setup
@@ -358,11 +401,11 @@ def describe_desktop() -> str:
         print(f"[SYSTEM] ⏳ Please wait...")
 
         response = ollama.chat(
-            model='gemma4:e4b',
+            model=VISION_MODEL,
             messages=[
                 {
                     'role': 'system',
-                    'content': 'You are a screen reader. Answer directly without explaining your reasoning process.'
+                    'content': 'You are a screen reader for visually impaired users. Describe what you see in plain text without any formatting. Do not use markdown, asterisks, or special characters. Answer directly without explaining your reasoning process.'
                 },
                 {
                     'role': 'user',
@@ -903,6 +946,15 @@ def search_files(query: str, file_type: str = "files", limit: int = 10) -> str:
     except Exception as e:
         return f"Error searching: {str(e)}"
 
+def set_wallpaper(image_path: str) -> str:
+    """Set desktop wallpaper/background image."""
+    print(f"\n[SYSTEM] Setting wallpaper: {image_path}...")
+    try:
+        result = mcp_client.call_tool("set_wallpaper", {"image_path": image_path})
+        return result
+    except Exception as e:
+        return f"Error setting wallpaper: {str(e)}"
+
 def maximize_window_by_name(window_name: str = "") -> str:
     """Toggle maximize/restore for a window. If empty, maximizes the currently focused window."""
     if window_name:
@@ -1346,7 +1398,6 @@ def drag_item(from_position: str = "center", to_position: str = "center",
 
 # Available tools (custom wrappers)
 available_tools = {
-    "launch_application": launch_application,
     "describe_desktop": describe_desktop,
     "list_installed_applications": list_installed_applications,
     "list_open_windows": list_open_windows,
@@ -1378,13 +1429,12 @@ available_tools = {
     "toggle_do_not_disturb": toggle_do_not_disturb,
     "toggle_wifi": toggle_wifi,
     "toggle_bluetooth": toggle_bluetooth,
-    "open_file": open_file,
-    "open_url": open_url,
-    "search_files": search_files,
+    "set_wallpaper": set_wallpaper,
 }
 
 # Direct MCP tools (forwarded directly without wrappers)
 direct_mcp_tools = [
+    "gnome_search",      # GNOME search overlay - find and open apps/files/settings
     "key_press",         # Press single key - simple passthrough
     "mouse_click",       # Click at screen coordinates - simple passthrough
     "mouse_double_click", # Double-click at screen coordinates - simple passthrough
@@ -1397,11 +1447,128 @@ direct_mcp_tools = [
     "cleanup_screenshots", # Clean up temp screenshot files - maintenance
 ]
 
-# Tool schema
-tool_schema = [
-{"type": "function", "function": {"name": "launch_application", "description": "Launches a graphical application on the Linux desktop.", "parameters": {"type": "object", "properties": {"app_name": {"type": "string", "description": "The command name of the app"}}, "required": ["app_name"]}}},
+# ----------------------------------------
+# Namespace Organization + Semantic Retrieval
+# ----------------------------------------
+
+# Define tool namespaces with semantic descriptions
+# Each namespace groups related tools with a description used for retrieval
+namespaces = {
+    "search": {
+        "description": "Launch applications, start programs, open files, navigate to websites. Commands like: open firefox, open text editor, start calculator, launch terminal, run files app. Open documents: open screenshot.png, open document.pdf, find image.jpg. Web navigation: go to amazon.com, visit github.com, browse seznam.cz, open google.com. Settings: open wifi settings, bluetooth settings. Use GNOME search to find and launch anything.",
+        "tools": ["gnome_search"]
+    },
+    "window": {
+        "description": "Managing already running windows - maximize, minimize, close, focus, move, resize, restore existing application windows. List what windows are currently running. NOT for launching new applications.",
+        "tools": ["list_open_windows", "focus_window_by_name", "close_window_by_name",
+                  "maximize_window_by_name", "minimize_window_by_name", "restore_window_by_name",
+                  "screenshot_window_by_name", "screenshot_area", "move_resize_window_by_name"]
+    },
+    "workspace": {
+        "description": "Virtual desktops, workspace switching, multi-desktop management",
+        "tools": ["list_workspaces", "activate_workspace"]
+    },
+    "input": {
+        "description": "Keyboard input, typing text, pressing keys, key combinations, shortcuts, mouse clicks, dragging, scrolling",
+        "tools": ["type_text_in_window", "press_key_combo", "key_press", "mouse_click",
+                  "mouse_double_click", "drag_item", "scroll_page"]
+    },
+    "volume": {
+        "description": "Sound volume control, mute, unmute, audio levels, speaker settings",
+        "tools": ["set_volume", "mute_volume", "unmute_volume"]
+    },
+    "media": {
+        "description": "Media playback control - play, pause, stop, next track, previous track, music control, audio player control",
+        "tools": ["media_play", "media_pause", "media_play_pause", "media_next", "media_previous", "media_stop"]
+    },
+    "settings": {
+        "description": "System settings - dark mode, light mode, night light, notifications, do not disturb, WiFi, Bluetooth, wallpaper, background image, quick settings toggles",
+        "tools": ["toggle_dark_mode", "toggle_night_light", "toggle_do_not_disturb",
+                  "toggle_wifi", "toggle_bluetooth", "set_wallpaper"]
+    },
+    "vision": {
+        "description": "Analyzing current screen content, describing what's visible on desktop right now, color picking from display, monitor configuration. Not for opening files.",
+        "tools": ["describe_desktop", "pick_color", "get_monitors"]
+    },
+    "system": {
+        "description": "System automation control, notifications, reminders, timers, cleanup, maintenance",
+        "tools": ["set_enabled", "send_notification", "cleanup_screenshots"]
+    }
+}
+
+# Load embedding model for semantic retrieval (offline mode set at import time)
+print("[SYSTEM] Loading embedding model for tool retrieval...")
+embedding_model = SentenceTransformer('all-MiniLM-L6-v2', device='cpu')  # Uses cached model only
+
+# Pre-compute namespace embeddings
+namespace_names = list(namespaces.keys())
+namespace_descriptions = [namespaces[ns]["description"] for ns in namespace_names]
+namespace_embeddings = embedding_model.encode(namespace_descriptions, convert_to_tensor=True)
+print(f"[SYSTEM] ✓ Loaded embeddings for {len(namespace_names)} namespaces")
+
+def retrieve_relevant_namespaces(user_input: str, top_k: int = 3) -> list:
+    """
+    Retrieve most relevant namespaces for a user input using semantic similarity.
+
+    Args:
+        user_input: The user's command/query
+        top_k: Number of top namespaces to retrieve (default 3)
+
+    Returns:
+        List of namespace names sorted by relevance
+    """
+    # Encode user input
+    from sentence_transformers.util import cos_sim
+    query_embedding = embedding_model.encode(user_input, convert_to_tensor=True)
+
+    # Compute cosine similarity
+    similarities = cos_sim(query_embedding, namespace_embeddings)[0]
+
+    # Get top-k indices
+    top_indices = similarities.argsort(descending=True)[:top_k]
+
+    # Return namespace names
+    relevant_namespaces = [namespace_names[i] for i in top_indices]
+
+    # Debug logging
+    print(f"[RETRIEVAL] Query: '{user_input}'")
+    for i, ns in enumerate(relevant_namespaces):
+        score = similarities[namespace_names.index(ns)].item()
+        print(f"  {i+1}. {ns} (score: {score:.3f}) - {len(namespaces[ns]['tools'])} tools")
+
+    return relevant_namespaces
+
+def build_filtered_tool_schema(relevant_namespaces: list) -> list:
+    """
+    Build a filtered tool schema containing only tools from relevant namespaces.
+
+    Args:
+        relevant_namespaces: List of namespace names to include
+
+    Returns:
+        Filtered tool_schema list with only relevant tools
+    """
+    # Collect all tool names from relevant namespaces
+    relevant_tool_names = set()
+    for ns in relevant_namespaces:
+        relevant_tool_names.update(namespaces[ns]["tools"])
+
+    # Filter tool_schema (will be defined below)
+    # We'll use a mapping from tool name to tool definition
+    filtered_schema = [tool for tool in tool_schema_full
+                      if tool["function"]["name"] in relevant_tool_names]
+
+    print(f"[FILTER] Showing {len(filtered_schema)} tools from {len(relevant_namespaces)} namespaces")
+    print(f"  Tools: {[t['function']['name'] for t in filtered_schema]}")
+
+    return filtered_schema
+
+# Full tool schema (all 43 tools)
+# This will be filtered dynamically based on user input
+tool_schema_full = [
+{"type": "function", "function": {"name": "gnome_search", "description": "Use GNOME search to find and open apps, files, or settings. Opens Activities search, types the query, and presses Enter. GNOME finds and opens the best match automatically. Extract just the app name, file name, or domain from user input.", "parameters": {"type": "object", "properties": {"query": {"type": "string", "description": "Just the app name, file name, or domain. Examples: 'firefox', 'text editor', 'screenshot.png', 'amazon.com', 'wifi'"}}, "required": ["query"]}}},
 {"type": "function", "function": {"name": "describe_desktop", "description": "Captures a screenshot of the desktop and describes what is visible using AI vision.", "parameters": {"type": "object", "properties": {}}}},
-{"type": "function", "function": {"name": "list_installed_applications", "description": "Lists all installed GUI applications available on the Linux system.", "parameters": {"type": "object", "properties": {}}}},
+{"type": "function", "function": {"name": "list_installed_applications", "description": "Lists all installed GUI applications available on the Linux system. Use for 'what apps are installed', 'list all applications', 'show me installed programs'.", "parameters": {"type": "object", "properties": {}}}},
 {"type": "function", "function": {"name": "list_open_windows", "description": "Lists all currently open windows on the desktop.", "parameters": {"type": "object", "properties": {}}}},
 {"type": "function", "function": {"name": "focus_window_by_name", "description": "Focus and bring to front a window. Can match by application name (e.g. 'text editor', 'firefox'). If window_name is empty, focuses the current window.", "parameters": {"type": "object", "properties": {"window_name": {"type": "string", "description": "Application name or part of window title (e.g., 'text editor', 'firefox'). Leave empty to use current window.", "default": ""}}, "required": []}}},
 {"type": "function", "function": {"name": "close_window_by_name", "description": "Safely close a window. Matches by application name (e.g., 'text editor'). If window_name is empty, closes the current window. If unsaved changes exist, asks user via voice what to do (Save, Discard, Cancel).", "parameters": {"type": "object", "properties": {"window_name": {"type": "string", "description": "Application name or part of window title (e.g., 'text editor', 'firefox'). Leave empty to use current window.", "default": ""}}, "required": []}}},
@@ -1421,9 +1588,7 @@ tool_schema = [
 {"type": "function", "function": {"name": "toggle_do_not_disturb", "description": "Enable or disable Do Not Disturb mode (blocks notifications). Use for 'turn on do not disturb', 'turn off do not disturb', 'enable DND', 'disable DND', 'silence notifications', 'allow notifications'.", "parameters": {"type": "object", "properties": {"enabled": {"type": "boolean", "description": "true to enable DND (block notifications), false to disable DND (allow notifications)"}}, "required": ["enabled"]}}},
 {"type": "function", "function": {"name": "toggle_wifi", "description": "Enable or disable WiFi. Use for 'turn on wifi', 'turn off wifi', 'enable wifi', 'disable wifi', 'wifi on', 'wifi off'.", "parameters": {"type": "object", "properties": {"enabled": {"type": "boolean", "description": "true to enable WiFi, false to disable"}}, "required": ["enabled"]}}},
 {"type": "function", "function": {"name": "toggle_bluetooth", "description": "Enable or disable Bluetooth. Use for 'turn on bluetooth', 'turn off bluetooth', 'enable bluetooth', 'disable bluetooth', 'bluetooth on', 'bluetooth off'.", "parameters": {"type": "object", "properties": {"enabled": {"type": "boolean", "description": "true to enable Bluetooth, false to disable"}}, "required": ["enabled"]}}},
-{"type": "function", "function": {"name": "open_file", "description": "Smart file opener - opens files with automatic search. Give it a full path (~/Documents/report.pdf) OR just a filename (screenshot.png) and it will search for it. Optionally specify search_location (Pictures, Documents, Downloads, etc.) to narrow the search. Use for 'open screenshot.png', 'open screenshot in pictures', 'open ~/Documents/report.pdf'. DO NOT use for URLs - use open_url instead.", "parameters": {"type": "object", "properties": {"path": {"type": "string", "description": "File path or filename. Full path (~/Documents/file.pdf) opens directly. Filename (screenshot.png) triggers automatic search."}, "search_location": {"type": "string", "description": "Optional folder to search in: Pictures, Documents, Downloads, Music, Videos, Desktop. Only used when path is a filename.", "default": ""}}, "required": ["path"]}}},
-{"type": "function", "function": {"name": "open_url", "description": "Open a URL in the default web browser. Automatically adds https:// if not present. Use for 'open google.com', 'go to github.com', 'open https://example.com'.", "parameters": {"type": "object", "properties": {"url": {"type": "string", "description": "URL to open. Can be with or without protocol (google.com or https://google.com)"}}, "required": ["url"]}}},
-{"type": "function", "function": {"name": "search_files", "description": "Search for files using GNOME file indexing. Returns JSON list of matching file paths. Use for explicit search queries: 'find all PDFs', 'search for screenshots', 'where are my tax documents'. For simple 'open X' commands, use open_file instead (it searches automatically).", "parameters": {"type": "object", "properties": {"query": {"type": "string", "description": "Search term - filename, keyword, or content"}, "file_type": {"type": "string", "description": "Type: files, folders, images, videos, documents, audio, music_albums, music_artists, software", "default": "files"}, "limit": {"type": "integer", "description": "Max results (1-50)", "default": 10}}, "required": ["query"]}}},
+{"type": "function", "function": {"name": "set_wallpaper", "description": "Set desktop wallpaper/background image. Smart search: use color names (red, blue, green, orange, purple, gray, black) OR wallpaper names (fedora, adwaita, amber) OR file paths. Use for 'change background to red', 'set wallpaper blue', 'change wallpaper to fedora', 'set wallpaper ~/Pictures/sunset.jpg'.", "parameters": {"type": "object", "properties": {"image_path": {"type": "string", "description": "Color name (red, blue, green), wallpaper name (fedora, amber), or file path (/home/user/Pictures/photo.jpg, ~/Pictures/sunset.png)"}}, "required": ["image_path"]}}},
 {"type": "function", "function": {"name": "maximize_window_by_name", "description": "Toggle maximize/restore for a window. Matches by application name (e.g., 'text editor'). If window_name is empty, uses the current window. If already maximized, restores to original size. If not maximized, makes it full-screen.", "parameters": {"type": "object", "properties": {"window_name": {"type": "string", "description": "Application name (e.g., 'text editor', 'firefox'). Leave empty to use current window.", "default": ""}}, "required": []}}},
 {"type": "function", "function": {"name": "minimize_window_by_name", "description": "Minimize (hide) a window. Matches by application name (e.g., 'text editor'). If window_name is empty, uses the current window.", "parameters": {"type": "object", "properties": {"window_name": {"type": "string", "description": "Application name (e.g., 'text editor', 'firefox'). Leave empty to use current window.", "default": ""}}, "required": []}}},
 {"type": "function", "function": {"name": "restore_window_by_name", "description": "Restore a window to normal state. Works for both minimized and maximized windows - brings them back to regular size and visibility. Matches by application name (e.g., 'text editor'). If window_name is empty, uses the current window.", "parameters": {"type": "object", "properties": {"window_name": {"type": "string", "description": "Application name (e.g., 'text editor', 'firefox'). Leave empty to use current window.", "default": ""}}, "required": []}}},
@@ -1444,12 +1609,48 @@ tool_schema = [
 {"type": "function", "function": {"name": "cleanup_screenshots", "description": "Remove all temporary screenshot files from /tmp/gnome-mcp to free up disk space. Use for 'clean up screenshots', 'delete temp screenshots', 'free up screenshot space'.", "parameters": {"type": "object", "properties": {}, "required": []}}}
 ]
 
+# Initially, use all tools (will be filtered dynamically during execution)
+tool_schema = tool_schema_full
+
 # ----------------------------------------
 # Voice Setup
 # ----------------------------------------
 print("[SYSTEM] Loading Neural Voice...")
 voice_model = PiperVoice.load("en_US-lessac-medium.onnx")
 print("[SYSTEM] Voice ready.")
+
+def strip_markdown(text: str) -> str:
+    """Remove markdown formatting from text for TTS.
+
+    Removes:
+    - Bold: **text** or __text__
+    - Italic: *text* or _text_
+    - Code: `text`
+    - Headers: # text
+    - Lists: - text, * text, 1. text
+    """
+    import re
+
+    # Remove bold (**text** or __text__)
+    text = re.sub(r'\*\*(.+?)\*\*', r'\1', text)
+    text = re.sub(r'__(.+?)__', r'\1', text)
+
+    # Remove italic (*text* or _text_) - be careful not to remove emphasis
+    text = re.sub(r'\*(.+?)\*', r'\1', text)
+    text = re.sub(r'_(.+?)_', r'\1', text)
+
+    # Remove inline code (`text`)
+    text = re.sub(r'`(.+?)`', r'\1', text)
+
+    # Remove headers (# text)
+    text = re.sub(r'^#+\s*', '', text, flags=re.MULTILINE)
+
+    # Remove list markers (- text, * text, 1. text)
+    text = re.sub(r'^\s*[-*]\s+', '', text, flags=re.MULTILINE)
+    text = re.sub(r'^\s*\d+\.\s+', '', text, flags=re.MULTILINE)
+
+    return text
+
 
 def speak(text: str):
     """Converts text to neural speech and plays it."""
@@ -1460,10 +1661,13 @@ def speak(text: str):
         print(f"[SYSTEM] ⚠️ Skipping TTS - empty text")
         return
 
+    # Strip markdown formatting for better TTS
+    clean_text = strip_markdown(text)
+
     temp_audio_path = "/tmp/agent_response.wav"
     try:
         with wave.open(temp_audio_path, "wb") as wav_file:
-            voice_model.synthesize_wav(text, wav_file)
+            voice_model.synthesize_wav(clean_text, wav_file)
         subprocess.run(["aplay", "-q", temp_audio_path], check=True)
     except Exception as e:
         print(f"[SYSTEM] Voice error: {e}")
@@ -1736,7 +1940,7 @@ Reply with ONE word only: command or conversation"""
 
     try:
         response = ollama.chat(
-            model='gemma4:e4b',
+            model=CLASSIFIER_MODEL,
             messages=[{'role': 'user', 'content': classifier_prompt}],
             options={
                 'num_predict': 10,
@@ -1786,10 +1990,10 @@ Be friendly and informative."""
     try:
         print(f"[CHAT] Generating response...")
         response = ollama.chat(
-            model='gemma4:e4b',
+            model=CONVERSATION_MODEL,
             messages=messages,
             options={
-                # No num_predict limit - let Gemma stop naturally
+                # No num_predict limit - let model stop naturally
                 # Prompt already asks for concise responses (3 sentences)
                 'temperature': 0.7,
                 'num_ctx': 2048
@@ -1860,15 +2064,22 @@ def run_agent():
     conversation_history = []
     command_messages = [command_system_msg]
 
+    # Notify user that system is ready
+    print("[SYSTEM] ✓ Voice orchestrator ready")
+    speak("Voice orchestrator ready. Listening for commands.")
+
     try:
         while True:
             user_input = listen_and_transcribe()
             if not user_input:
                 continue
 
+            # Start timing from when user input is captured
+            response_start_time = time.time()
+
             user_input_lower = user_input.lower()
 
-            # Check for explicit mode switching
+            # Check for explicit mode switching (these don't need timing - just mode control)
             if 'switch to command mode' in user_input_lower or 'command mode' in user_input_lower:
                 current_mode = 'command'
                 speak("Command mode activated. I'll only execute desktop commands.")
@@ -1911,16 +2122,34 @@ def run_agent():
 
                 command_messages.append({"role": "user", "content": user_input})
 
+                # Hybrid namespace + retrieval approach
+                # Retrieve top 3 most relevant namespaces for this query
+                relevant_namespaces = retrieve_relevant_namespaces(user_input, top_k=3)
+
+                # Build filtered tool schema with only relevant tools
+                filtered_tools = build_filtered_tool_schema(relevant_namespaces)
+
+                print(f"[TIMING] ⏱️  Calling {COMMAND_MODEL} with {len(filtered_tools)} tools...")
+                llm_start_time = time.time()
                 response = ollama.chat(
-                    model='gemma4:e4b',
+                    model=COMMAND_MODEL,
                     messages=command_messages,
-                    tools=tool_schema,
+                    tools=filtered_tools,  # Use filtered tools instead of all 43
                     keep_alive=-1,
                     options={
                         'temperature': 0.0,
-                        'top_p': 0.1
+                        'top_p': 0.1,
+                        'num_predict': 200  # Limit tokens - function calls are short (<100 tokens)
                     }
                 )
+                llm_elapsed = time.time() - llm_start_time
+                print(f"[TIMING] ⏱️  LLM inference took: {llm_elapsed:.2f}s")
+
+                # Debug: Check what gemma actually generated
+                print(f"[DEBUG] Gemma eval_count: {response.get('eval_count', 'N/A')} tokens")
+                print(f"[DEBUG] Response content length: {len(response['message'].get('content', ''))}")
+                if response['message'].get('content'):
+                    print(f"[DEBUG] Content preview: {response['message']['content'][:200]}")
 
                 message = response['message']
                 command_messages.append(message)
@@ -1946,6 +2175,8 @@ def run_agent():
                                     result = f"Error: {health_msg}"
 
                             print(f"\n[OS Feedback]: {result}")
+                            response_time = time.time() - response_start_time
+                            print(f"[TIMING] ⏱️  Response time: {response_time:.2f}s")
                             speak(result)
                             command_messages = [command_system_msg]
 
@@ -1965,16 +2196,22 @@ def run_agent():
                                     result = f"Error: {health_msg}"
 
                             print(f"\n[OS Feedback]: {result}")
+                            response_time = time.time() - response_start_time
+                            print(f"[TIMING] ⏱️  Response time: {response_time:.2f}s")
                             speak(result)
                             command_messages = [command_system_msg]
 
                         else:
                             print(f"[COMMAND] ⚠️  Unknown tool: {tool_name}")
+                            response_time = time.time() - response_start_time
+                            print(f"[TIMING] ⏱️  Response time: {response_time:.2f}s")
                             speak(f"I don't know how to use {tool_name}")
                             command_messages = [command_system_msg]
                 else:
                     # No tool call generated
                     print("[COMMAND] ⚠️  No tool call generated. Try rephrasing or switch to chat mode.")
+                    response_time = time.time() - response_start_time
+                    print(f"[TIMING] ⏱️  Response time: {response_time:.2f}s")
                     speak("I'm not sure what command to run. Try rephrasing or say 'switch to chat mode'.")
 
             else:  # intent_type == 'conversation'
@@ -1984,10 +2221,21 @@ def run_agent():
                 answer, conversation_history = handle_conversation(user_input, conversation_history)
 
                 print(f"\n[Agent]: {answer}")
+                response_time = time.time() - response_start_time
+                print(f"[TIMING] ⏱️  Response time: {response_time:.2f}s")
                 speak(answer)
 
     except KeyboardInterrupt:
         print("\n[SYSTEM] 🛑 Ctrl+C received, shutting down gracefully...")
+        # Unload models from memory
+        print("[SYSTEM] Unloading AI models...")
+        try:
+            # Stop all models that might be loaded
+            for model in [COMMAND_MODEL, VISION_MODEL, CONVERSATION_MODEL, CLASSIFIER_MODEL]:
+                ollama.chat(model=model, messages=[], keep_alive=0)
+        except:
+            pass  # Ignore errors if models weren't loaded
+        print("[SYSTEM] ✓ Models unloaded")
         return
 
 if __name__ == "__main__":
@@ -1995,3 +2243,12 @@ if __name__ == "__main__":
         run_agent()
     except KeyboardInterrupt:
         print("\n\n[SYSTEM] Shutting down Agentic OS...")
+        # Unload models from memory
+        print("[SYSTEM] Unloading AI models...")
+        try:
+            # Stop all models that might be loaded
+            for model in [COMMAND_MODEL, VISION_MODEL, CONVERSATION_MODEL, CLASSIFIER_MODEL]:
+                ollama.chat(model=model, messages=[], keep_alive=0)
+        except:
+            pass  # Ignore errors if models weren't loaded
+        print("[SYSTEM] ✓ Models unloaded")
