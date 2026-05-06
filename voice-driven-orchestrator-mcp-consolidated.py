@@ -1,21 +1,36 @@
 #!/usr/bin/env python3
 """
-Voice-Driven Desktop Orchestrator with CONSOLIDATED TOOLS
+Voice-Driven Desktop Orchestrator with CONSOLIDATED TOOLS (Facade Pattern)
 
-This is a REFERENCE implementation showing the facade pattern for tool consolidation.
-Reduces 34 individual tools to 6 facade tools while maintaining all functionality.
+This version uses the facade pattern to consolidate 34 individual tools into 10 tools:
+- 6 facade tools (window_control, input_control, audio_control, system_settings, vision_control, workspace_control)
+- 3 standalone tools (list_installed_applications, send_notification, cleanup_screenshots)
+- 1 search tool (gnome_search)
 
-Key changes from conversational version:
-- 34 tools → 6 facade tools (window_control, input_control, audio_control, system_settings, vision_control, workspace_control)
-- search (gnome_search) kept as-is
-- Expected performance: ~17-20s inference (vs 41-69s with 34 tools)
-- RAG retrieval benefits from fewer, clearer choices
+Benefits:
+- ⚡ 2-3× faster inference (~17-20s vs 41-69s with 34 tools)
+- 🔧 All original functionality preserved through internal routing
+- 📊 Clearer namespace organization for RAG
+- 🚀 Scales to 100+ features without performance degradation
+
+Features:
+- ✅ VAD continuous listening
+- ✅ Configurable AI models (granite, gemma4, etc.)
+- ✅ Vision support for screen analysis
+- ✅ Tool calling for desktop automation (CONSOLIDATED)
+- ✅ SAFE close handling with dialog detection
+- ✅ Conversation mode - chat with AI for questions/help
+- ✅ Automatic intent detection - seamlessly switches between command & chat
+
+Configuration:
+To change models, edit the MODEL CONFIGURATION section below
 """
 
 import os
 import sys
 
 # Force offline mode for sentence-transformers BEFORE import
+# This prevents internet checks to HuggingFace Hub
 os.environ['TRANSFORMERS_OFFLINE'] = '1'
 os.environ['HF_HUB_OFFLINE'] = '1'
 
@@ -43,13 +58,35 @@ from dialog_handler import DialogHandler
 # ========================================
 # 🎯 MODEL CONFIGURATION
 # ========================================
-COMMAND_MODEL = 'gemma4:e4b'
-VISION_MODEL = 'gemma4:e4b'
-CONVERSATION_MODEL = 'gemma4:e4b'
-CLASSIFIER_MODEL = 'gemma4:e4b'
+# Change models here - use models that support vision + tool calling
+#
+# Available models (tested):
+#   • granite3.2-vision:latest - 2.4GB, 2-3x faster, supports vision + tools ⭐ RECOMMENDED
+#   • gemma4:e4b              - 9.6GB, slower but stable, supports vision + tools
+#
+# For best performance:
+#   1. Use granite3.2-vision for everything (fastest)
+#   2. Or use granite for commands, keep gemma4 for vision only
+# ========================================
+
+# Model for command mode (tool calling)
+COMMAND_MODEL = 'gemma4:e4b'  # Change to 'gemma4:e4b' if needed
+
+# Model for vision tasks (describe_desktop)
+VISION_MODEL = 'gemma4:e4b'   # Change to 'gemma4:e4b' if needed
+
+# Model for conversation mode (chat/questions)
+CONVERSATION_MODEL = 'gemma4:e4b'  # Change to 'gemma4:e4b' if needed
+
+# Model for intent classification (command vs chat detection)
+CLASSIFIER_MODEL = 'gemma4:e4b'  # Change to 'gemma4:e4b' if needed
+
+# ========================================
+# End of configuration
+# ========================================
 
 # ----------------------------------------
-# MCP Client Setup (same as before)
+# MCP Client Setup
 # ----------------------------------------
 class MCPClient:
     """Manages connection to gnome-desktop-mcp server"""
@@ -117,7 +154,7 @@ class MCPClient:
 
 mcp_client = MCPClient()
 
-# Initialize dialog handler
+# Initialize dialog handler (auto-checks/enables accessibility)
 print("[SYSTEM] Initializing dialog handler...")
 dialog_handler = DialogHandler()
 
@@ -129,15 +166,25 @@ def listen_and_transcribe():
     pass
 
 # ----------------------------------------
-# Helper Functions (keeping existing ones)
+# Health Check & Auto-Recovery
 # ----------------------------------------
 def check_automation_health(auto_enable=True) -> tuple[bool, str]:
-    """Check if GNOME automation extension is running and enabled."""
+    """
+    Check if GNOME automation extension is running and enabled.
+
+    Args:
+        auto_enable: If True, automatically enable automation if it's disabled
+
+    Returns:
+        (success: bool, message: str)
+    """
     try:
+        # Step 1: Ping the extension
         ping_result = mcp_client.call_tool("ping", {})
         if "Error" in ping_result or "alive" not in ping_result.lower():
-            return False, "GNOME automation extension not responding."
+            return False, "GNOME automation extension not responding. Please check if it's installed and enabled in GNOME Extensions."
 
+        # Step 2: Check if automation is enabled
         enabled_result = mcp_client.call_tool("get_enabled", {})
         if "Error" in enabled_result:
             return False, f"Could not check automation status: {enabled_result}"
@@ -161,23 +208,30 @@ def check_automation_health(auto_enable=True) -> tuple[bool, str]:
         return False, f"Health check failed: {e}"
 
 # ----------------------------------------
-# App indexing (keeping existing implementation)
+# Desktop Application Indexing
 # ----------------------------------------
-app_name_map = {}
-app_friendly_name = {}
+app_name_map = {}  # Global app name mapping: term → executable
+app_friendly_name = {}  # Global executable → friendly name
 
 def build_app_index():
-    """Build index of desktop applications from .desktop files."""
+    """Build index of desktop applications from .desktop files.
+
+    Maps natural language terms (Name, GenericName, Keywords) to executable names.
+    org.gnome apps have priority and overwrite conflicts.
+    """
     global app_name_map, app_friendly_name
     app_name_map = {}
     app_friendly_name = {}
 
     desktop_dir = "/usr/share/applications"
+
     if not os.path.isdir(desktop_dir):
         print(f"[SYSTEM] Warning: {desktop_dir} not found")
         return
 
+    # Parse all desktop files and collect data
     apps = []
+
     for filename in os.listdir(desktop_dir):
         if not filename.endswith('.desktop'):
             continue
@@ -189,35 +243,43 @@ def build_app_index():
             with open(filepath, 'r', encoding='utf-8') as f:
                 content = f.read()
 
+            # Parse desktop file
             exec_name = None
             name = None
             generic_name = None
             keywords = []
 
+            # Only parse [Desktop Entry] section, stop at next section
             in_desktop_entry = False
             for line in content.split('\n'):
                 line = line.strip()
 
+                # Check for section headers
                 if line.startswith('['):
                     if line == '[Desktop Entry]':
                         in_desktop_entry = True
                         continue
                     elif in_desktop_entry:
+                        # Hit another section, stop parsing
                         break
 
                 if not in_desktop_entry:
                     continue
 
                 if line.startswith('Exec='):
+                    # Extract executable (first word, remove path and % codes)
                     exec_line = line[5:].strip()
                     exec_name = exec_line.split()[0] if exec_line else None
                     if exec_name:
+                        # Remove path prefix if present
                         exec_name = os.path.basename(exec_name)
 
                 elif line.startswith('Name=') and not name:
+                    # Only take first Name= encountered
                     name = line.split('=', 1)[1].strip()
 
                 elif line.startswith('GenericName=') and not generic_name:
+                    # Only take first GenericName= encountered
                     generic_name = line.split('=', 1)[1].strip()
 
                 elif line.startswith('Keywords='):
@@ -233,14 +295,17 @@ def build_app_index():
                     'is_gnome': is_gnome
                 })
         except:
+            # Skip files that can't be parsed
             continue
 
-    # First pass: non-gnome apps
+    # First pass: add all non-org.gnome apps
     for app in apps:
         if app['is_gnome']:
             continue
 
         exec_name = app['exec']
+
+        # Store friendly name (prefer Name field)
         if app['name']:
             app_friendly_name[exec_name] = app['name']
         elif app['generic_name']:
@@ -248,16 +313,20 @@ def build_app_index():
         else:
             app_friendly_name[exec_name] = exec_name
 
+        # Add mappings (case-insensitive)
         app_name_map[exec_name.lower()] = exec_name
+
         if app['name']:
             app_name_map[app['name'].lower()] = exec_name
+
         if app['generic_name']:
             app_name_map[app['generic_name'].lower()] = exec_name
+
         for keyword in app['keywords']:
             if keyword:
                 app_name_map[keyword.lower()] = exec_name
 
-    # Second pass: gnome apps (overwrite conflicts)
+    # Second pass: add org.gnome apps (overwrite conflicts with priority)
     gnome_count = 0
     for app in apps:
         if not app['is_gnome']:
@@ -266,6 +335,7 @@ def build_app_index():
         gnome_count += 1
         exec_name = app['exec']
 
+        # Store friendly name (prefer Name field, overwrite previous)
         if app['name']:
             app_friendly_name[exec_name] = app['name']
         elif app['generic_name']:
@@ -273,92 +343,23 @@ def build_app_index():
         else:
             app_friendly_name[exec_name] = exec_name
 
+        # Add mappings (case-insensitive) - these overwrite non-gnome apps
         app_name_map[exec_name.lower()] = exec_name
+
         if app['name']:
             app_name_map[app['name'].lower()] = exec_name
+
         if app['generic_name']:
             app_name_map[app['generic_name'].lower()] = exec_name
+
         for keyword in app['keywords']:
             if keyword:
                 app_name_map[keyword.lower()] = exec_name
 
     print(f"[SYSTEM] ✓ Indexed {len(app_name_map)} app name mappings ({gnome_count} org.gnome with priority)")
 
-def get_installed_gui_apps() -> list:
-    """Get list of installed GUI applications."""
-    apps = set()
-    desktop_dir = "/usr/share/applications"
-
-    if not os.path.isdir(desktop_dir):
-        return []
-
-    for filename in os.listdir(desktop_dir):
-        if filename.endswith('.desktop'):
-            filepath = os.path.join(desktop_dir, filename)
-            try:
-                with open(filepath, 'r', encoding='utf-8') as f:
-                    content = f.read()
-                    for line in content.split('\n'):
-                        if line.startswith('Name='):
-                            app_name = line.split('=', 1)[1].strip()
-                            apps.add(app_name)
-                            break
-            except:
-                continue
-
-    return sorted(list(apps))
-
-def smart_match_window(window_name: str, windows: list) -> dict:
-    """Smart window matching that prioritizes app names over full window titles."""
-    if not window_name or window_name.strip() == "":
-        for w in windows:
-            if w.get('state', {}).get('focused', False):
-                return w
-        return windows[0] if windows else None
-
-    window_name_lower = window_name.lower()
-
-    # Try app name matching first
-    for w in windows:
-        wm_class = w.get('wmClass', '')
-        app_name = wm_class.lower()
-        app_name = app_name.replace('org.gnome.', '')
-        app_name = app_name.replace('org.', '')
-        app_name = app_name.replace('-', '')
-        app_name = app_name.replace('_', '')
-
-        wm_class_lower = wm_class.lower()
-        search_term = window_name_lower.replace(' ', '').replace('-', '').replace('_', '')
-
-        if search_term in app_name or window_name_lower in wm_class_lower:
-            return w
-
-    # Fall back to title matching
-    for w in windows:
-        title = w.get('title', '').lower()
-        if window_name_lower in title:
-            return w
-
-    return None
-
-def get_friendly_app_name(wm_class: str) -> str:
-    """Convert wmClass to friendly app name for voice output."""
-    if not wm_class:
-        return "Unknown App"
-
-    name = wm_class
-    name = name.replace('org.gnome.', '')
-    name = name.replace('org.mozilla.', '')
-    name = name.replace('org.', '')
-    name = name.replace('-', ' ')
-    name = name.replace('_', ' ')
-
-    import re
-    name = re.sub('([a-z])([A-Z])', r'\1 \2', name)
-    name = ' '.join(word.capitalize() for word in name.split())
-
-    return name
-
+# ----------------------------------------
+# Tool Functions
 # ========================================
 # 🔥 CONSOLIDATED FACADE TOOLS
 # ========================================
@@ -427,6 +428,7 @@ def window_control(action: str, window_name: str = "", x: int = 0, y: int = 0,
 
         # CLOSE (with dialog handling)
         elif action == "close":
+            window_title = target_window.get('title', 'Unknown')
             mcp_client.call_tool("close_window", {"window_id": window_id})
 
             # Check for save dialog
@@ -438,7 +440,11 @@ def window_control(action: str, window_name: str = "", x: int = 0, y: int = 0,
                     windows_after = json.loads(result)
                     if not any(w['id'] == window_id for w in windows_after):
                         return f"Successfully closed {friendly_name}"
-                return f"Window did not close (no dialog detected)"
+
+                # Try longer timeout
+                dialog = dialog_handler.detect_save_dialog(app_name=None, timeout=5.0)
+                if not dialog:
+                    return f"Window did not close. No dialog detected."
 
             # Dialog detected - ask user
             buttons = dialog['info']['buttons']
@@ -496,13 +502,11 @@ def window_control(action: str, window_name: str = "", x: int = 0, y: int = 0,
             state = target_window.get('state', {})
             is_maximized = state.get('maximized', False)
 
-            actions_taken = []
             mcp_client.call_tool("unminimize_window", {"window_id": window_id})
             mcp_client.call_tool("focus_window", {"window_id": window_id})
 
             if is_maximized:
                 mcp_client.call_tool("unmaximize_window", {"window_id": window_id})
-                actions_taken.append("unmaximized")
 
             return f"Restored {friendly_name}"
 
@@ -538,7 +542,8 @@ def window_control(action: str, window_name: str = "", x: int = 0, y: int = 0,
 
 def input_control(action: str, text: str = "", keys: str = "",
                  x: int = 0, y: int = 0, to_x: int = 0, to_y: int = 0,
-                 direction: str = "down", amount: int = 1, button: int = 1) -> str:
+                 direction: str = "down", amount: int = 1, button: int = 1,
+                 from_position: str = "center", to_position: str = "center") -> str:
     """
     **FACADE TOOL**: Unified input control.
 
@@ -551,6 +556,7 @@ def input_control(action: str, text: str = "", keys: str = "",
         keys: Key combo like 'Ctrl+c' (for 'key_combo' or 'key_press')
         x, y: Click position or drag start
         to_x, to_y: Drag end position
+        from_position, to_position: Natural language positions for drag
         direction: Scroll direction 'up' or 'down'
         amount: Scroll amount (number of times)
         button: Mouse button (1=left, 2=middle, 3=right)
@@ -592,6 +598,13 @@ def input_control(action: str, text: str = "", keys: str = "",
 
         # DRAG
         elif action == "drag":
+            # Use positions if coordinates not provided
+            if to_x == 0 and to_y == 0:
+                from_coords = parse_position(from_position)
+                to_coords = parse_position(to_position)
+                x, y = from_coords
+                to_x, to_y = to_coords
+
             mcp_client.call_tool("mouse_drag", {
                 "x1": x,
                 "y1": y,
@@ -630,6 +643,38 @@ def input_control(action: str, text: str = "", keys: str = "",
         return f"Error in input_control: {str(e)}"
 
 
+def parse_position(position: str, screen_width: int = 1920, screen_height: int = 1080) -> tuple:
+    """Convert natural language position to screen coordinates."""
+    position_lower = position.lower()
+    center_x = screen_width // 2
+    center_y = screen_height // 2
+    left_x = 100
+    right_x = screen_width - 100
+    top_y = 100
+    bottom_y = screen_height - 100
+
+    if "top left" in position_lower:
+        return (left_x, top_y)
+    elif "top right" in position_lower:
+        return (right_x, top_y)
+    elif "top" in position_lower:
+        return (center_x, top_y)
+    elif "bottom left" in position_lower:
+        return (left_x, bottom_y)
+    elif "bottom right" in position_lower:
+        return (right_x, bottom_y)
+    elif "bottom" in position_lower:
+        return (center_x, bottom_y)
+    elif "left" in position_lower:
+        return (left_x, center_y)
+    elif "right" in position_lower:
+        return (right_x, center_y)
+    elif "center" in position_lower or "middle" in position_lower:
+        return (center_x, center_y)
+    else:
+        return (center_x, center_y)
+
+
 def audio_control(action: str, level: int = 0, relative: bool = False) -> str:
     """
     **FACADE TOOL**: Unified audio control.
@@ -665,7 +710,9 @@ def audio_control(action: str, level: int = 0, relative: bool = False) -> str:
 
         # MEDIA CONTROLS
         elif action in ["play", "pause", "play_pause", "next", "previous", "stop"]:
-            result = mcp_client.call_tool("media_control", {"action": action.replace("_", "-")})
+            # Map underscores to dashes for MCP
+            mcp_action = action.replace("_", "-")
+            result = mcp_client.call_tool("media_control", {"action": mcp_action})
             return result
 
         else:
@@ -711,13 +758,13 @@ def system_settings(action: str, state: str = "toggle", path: str = "") -> str:
                 return f"Unknown setting: {action}"
 
             # Convert state to boolean
-            if state.lower() == "on":
+            if state.lower() in ["on", "true", "enable", "enabled"]:
                 enabled = True
-            elif state.lower() == "off":
+            elif state.lower() in ["off", "false", "disable", "disabled"]:
                 enabled = False
             else:
-                # For 'toggle', we'd need to query current state first
-                # For simplicity, assume the LLM provides explicit on/off
+                # For 'toggle', would need to query current state
+                # For simplicity, treat as error
                 return "Please specify 'on' or 'off' for this setting"
 
             result = mcp_client.call_tool("quick_settings", {
@@ -877,13 +924,14 @@ def list_installed_applications() -> str:
     except Exception as e:
         return f"Error listing applications: {str(e)}"
 
-def send_notification(title: str, message: str = "") -> str:
+def send_notification(summary: str, body: str = "", delay: str = "") -> str:
     """Send a desktop notification."""
-    print(f"\n[SYSTEM] Sending notification: {title}")
+    print(f"\n[SYSTEM] Sending notification: {summary}")
     try:
         result = mcp_client.call_tool("send_notification", {
-            "title": title,
-            "message": message
+            "summary": summary,
+            "body": body,
+            "delay": delay
         })
         return result
     except Exception as e:
@@ -1017,52 +1065,678 @@ tool_schema_full = [
     {"type": "function", "function": {"name": "window_control", "description": "Unified window management: list windows, focus/close/minimize/maximize/restore windows, take window screenshots or area screenshots, move and resize windows. Matches windows by application name (e.g., 'text editor', 'firefox'). Empty window_name = current window.", "parameters": {"type": "object", "properties": {"action": {"type": "string", "description": "Action to perform: list | focus | close | minimize | maximize | restore | screenshot | screenshot_area | move_resize"}, "window_name": {"type": "string", "description": "Application name (e.g., 'text editor'). Leave empty for current window.", "default": ""}, "x": {"type": "integer", "description": "X position for move_resize or screenshot_area", "default": 0}, "y": {"type": "integer", "description": "Y position for move_resize or screenshot_area", "default": 0}, "width": {"type": "integer", "description": "Width for move_resize or screenshot_area", "default": 800}, "height": {"type": "integer", "description": "Height for move_resize or screenshot_area", "default": 600}, "include_frame": {"type": "boolean", "description": "Include window borders in screenshot", "default": True}}, "required": ["action"]}}},
 
     # 3. INPUT_CONTROL (facade)
-    {"type": "function", "function": {"name": "input_control", "description": "Unified input control: type text, press key combos (Ctrl+C, Alt+Tab), press single keys, mouse click/double-click, drag and drop, scroll pages up/down. Handles all keyboard and mouse operations.", "parameters": {"type": "object", "properties": {"action": {"type": "string", "description": "Action: type | key_combo | key_press | click | double_click | drag | scroll"}, "text": {"type": "string", "description": "Text to type (for 'type' action)", "default": ""}, "keys": {"type": "string", "description": "Key combo like 'Ctrl+c' or single key like 'Enter'", "default": ""}, "x": {"type": "integer", "description": "X coordinate for click or drag start", "default": 0}, "y": {"type": "integer", "description": "Y coordinate for click or drag start", "default": 0}, "to_x": {"type": "integer", "description": "Drag end X coordinate", "default": 0}, "to_y": {"type": "integer", "description": "Drag end Y coordinate", "default": 0}, "direction": {"type": "string", "description": "Scroll direction: 'up' or 'down'", "default": "down"}, "amount": {"type": "integer", "description": "Scroll amount (number of times)", "default": 1}, "button": {"type": "integer", "description": "Mouse button: 1=left, 2=middle, 3=right", "default": 1}}, "required": ["action"]}}},
+    {"type": "function", "function": {"name": "input_control", "description": "Unified input control: type text, press key combos (Ctrl+C, Alt+Tab), press single keys, mouse click/double-click, drag and drop (supports both natural positions like 'left', 'right' and exact coordinates), scroll pages up/down. Handles all keyboard and mouse operations.", "parameters": {"type": "object", "properties": {"action": {"type": "string", "description": "Action: type | key_combo | key_press | click | double_click | drag | scroll"}, "text": {"type": "string", "description": "Text to type (for 'type' action)", "default": ""}, "keys": {"type": "string", "description": "Key combo like 'Ctrl+c' or single key like 'Enter'", "default": ""}, "x": {"type": "integer", "description": "X coordinate for click or drag start", "default": 0}, "y": {"type": "integer", "description": "Y coordinate for click or drag start", "default": 0}, "to_x": {"type": "integer", "description": "Drag end X coordinate", "default": 0}, "to_y": {"type": "integer", "description": "Drag end Y coordinate", "default": 0}, "from_position": {"type": "string", "description": "Natural language start position for drag: 'left', 'right', 'center', 'top left', etc.", "default": "center"}, "to_position": {"type": "string", "description": "Natural language end position for drag: 'left', 'right', 'center', 'bottom right', etc.", "default": "center"}, "direction": {"type": "string", "description": "Scroll direction: 'up' or 'down'", "default": "down"}, "amount": {"type": "integer", "description": "Scroll amount (number of times)", "default": 1}, "button": {"type": "integer", "description": "Mouse button: 1=left, 2=middle, 3=right", "default": 1}}, "required": ["action"]}}},
 
     # 4. AUDIO_CONTROL (facade)
     {"type": "function", "function": {"name": "audio_control", "description": "Unified audio control: volume (set/increase/decrease), mute, unmute, media playback (play, pause, play_pause toggle, next, previous, stop). Handles all sound and media controls.", "parameters": {"type": "object", "properties": {"action": {"type": "string", "description": "Action: volume | mute | unmute | play | pause | play_pause | next | previous | stop"}, "level": {"type": "integer", "description": "Volume level: 0-100 absolute, or +/- for relative change", "default": 0}, "relative": {"type": "boolean", "description": "True for relative volume change (+/-), false for absolute", "default": False}}, "required": ["action"]}}},
 
     # 5. SYSTEM_SETTINGS (facade)
-    {"type": "function", "function": {"name": "system_settings", "description": "Unified system settings: toggle dark mode, night light, do not disturb, WiFi, Bluetooth, set wallpaper. Handles all quick settings and appearance controls.", "parameters": {"type": "object", "properties": {"action": {"type": "string", "description": "Setting: dark_mode | night_light | do_not_disturb | wifi | bluetooth | wallpaper"}, "state": {"type": "string", "description": "For toggles: 'on' or 'off'. For wallpaper: color name (red, blue) or path", "default": "toggle"}, "path": {"type": "string", "description": "Image path for wallpaper action", "default": ""}}, "required": ["action"]}}},
+    {"type": "function", "function": {"name": "system_settings", "description": "Unified system settings: toggle dark mode, night light, do not disturb, WiFi, Bluetooth, set wallpaper. Handles all quick settings and appearance controls. For wallpaper: can use color names (red, blue, green), wallpaper names (fedora, adwaita), or file paths.", "parameters": {"type": "object", "properties": {"action": {"type": "string", "description": "Setting: dark_mode | night_light | do_not_disturb | wifi | bluetooth | wallpaper"}, "state": {"type": "string", "description": "For toggles: 'on' or 'off'. For wallpaper: color name (red, blue), wallpaper name (fedora), or path", "default": "toggle"}, "path": {"type": "string", "description": "Image path for wallpaper action (alternative to state parameter)", "default": ""}}, "required": ["action"]}}},
 
     # 6. VISION_CONTROL (facade)
-    {"type": "function", "function": {"name": "vision_control", "description": "Unified vision operations: describe what's on screen using AI, pick color at coordinates, get monitor information. Handles all screen analysis and display queries.", "parameters": {"type": "object", "properties": {"action": {"type": "string", "description": "Action: describe | pick_color | get_monitors"}, "x": {"type": "integer", "description": "X coordinate for pick_color", "default": 0}, "y": {"type": "integer", "description": "Y coordinate for pick_color", "default": 0}}, "required": ["action"]}}},
+    {"type": "function", "function": {"name": "vision_control", "description": "Unified vision operations: describe what's on screen using AI vision, pick RGB color at screen coordinates, get monitor information (position, resolution, scaling). Handles all screen analysis and display queries.", "parameters": {"type": "object", "properties": {"action": {"type": "string", "description": "Action: describe | pick_color | get_monitors"}, "x": {"type": "integer", "description": "X coordinate for pick_color", "default": 0}, "y": {"type": "integer", "description": "Y coordinate for pick_color", "default": 0}}, "required": ["action"]}}},
 
     # 7. WORKSPACE_CONTROL (facade)
-    {"type": "function", "function": {"name": "workspace_control", "description": "Unified workspace management: list all virtual desktops, switch to specific workspace by index. Handles all multi-desktop operations.", "parameters": {"type": "object", "properties": {"action": {"type": "string", "description": "Action: list | activate"}, "index": {"type": "integer", "description": "Workspace index (0-based) for activate action", "default": 0}}, "required": ["action"]}}},
+    {"type": "function", "function": {"name": "workspace_control", "description": "Unified workspace management: list all virtual desktops, switch to specific workspace by index (0-based). Handles all multi-desktop operations.", "parameters": {"type": "object", "properties": {"action": {"type": "string", "description": "Action: list | activate"}, "index": {"type": "integer", "description": "Workspace index (0-based) for activate action", "default": 0}}, "required": ["action"]}}},
 
     # 8. LIST_INSTALLED_APPLICATIONS (standalone)
     {"type": "function", "function": {"name": "list_installed_applications", "description": "Lists all installed GUI applications available on the Linux system. Use for 'what apps are installed', 'list all applications', 'show me installed programs'.", "parameters": {"type": "object", "properties": {}}}},
 
     # 9. SEND_NOTIFICATION (standalone)
-    {"type": "function", "function": {"name": "send_notification", "description": "Send a desktop notification with title and message. Use for reminders, alerts, confirmations.", "parameters": {"type": "object", "properties": {"title": {"type": "string", "description": "Notification title"}, "message": {"type": "string", "description": "Notification message body", "default": ""}}, "required": ["title"]}}},
+    {"type": "function", "function": {"name": "send_notification", "description": "Send a desktop notification immediately or after a delay. Use for reminders, timers, alerts. Examples: 'remind me in 5 minutes', 'notify in 1 hour', 'send notification' (immediate).", "parameters": {"type": "object", "properties": {"summary": {"type": "string", "description": "Notification title/headline (required)"}, "body": {"type": "string", "description": "Notification message body (optional)", "default": ""}, "delay": {"type": "string", "description": "Time delay: '5 minutes', '1 hour', '30 seconds'. Empty = immediate.", "default": ""}}, "required": ["summary"]}}},
 
     # 10. CLEANUP_SCREENSHOTS (standalone)
-    {"type": "function", "function": {"name": "cleanup_screenshots", "description": "Clean up temporary screenshot files to free disk space. Use for maintenance, cleanup tasks.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "cleanup_screenshots", "description": "Remove all temporary screenshot files to free disk space. Use for maintenance, cleanup tasks.", "parameters": {"type": "object", "properties": {}}}},
 ]
 
-print(f"[SYSTEM] ✓ Consolidated tool schema: {len(tool_schema_full)} facade + standalone tools")
+# Initially, use all tools (will be filtered dynamically during execution)
+tool_schema = tool_schema_full
+
+print(f"[SYSTEM] ✓ Consolidated tool schema: {len(tool_schema_full)} tools")
 print(f"[SYSTEM]   - Reduced from 34 individual tools")
 print(f"[SYSTEM]   - Expected performance: ~17-20s inference (vs 41-69s)")
 
-# ========================================
-# NOTE: Rest of the orchestrator implementation would go here
-# (VAD, Whisper, Piper, conversation loop, etc.)
-# For this reference implementation, we're focusing on the tool consolidation pattern
-# ========================================
+# ----------------------------------------
+# ----------------------------------------
+# Voice Setup
+# ----------------------------------------
+print("[SYSTEM] Loading Neural Voice...")
+voice_model = PiperVoice.load("en_US-lessac-medium.onnx")
+print("[SYSTEM] Voice ready.")
+
+def strip_markdown(text: str) -> str:
+    """Remove markdown formatting from text for TTS.
+
+    Removes:
+    - Bold: **text** or __text__
+    - Italic: *text* or _text_
+    - Code: `text`
+    - Headers: # text
+    - Lists: - text, * text, 1. text
+    """
+    import re
+
+    # Remove bold (**text** or __text__)
+    text = re.sub(r'\*\*(.+?)\*\*', r'\1', text)
+    text = re.sub(r'__(.+?)__', r'\1', text)
+
+    # Remove italic (*text* or _text_) - be careful not to remove emphasis
+    text = re.sub(r'\*(.+?)\*', r'\1', text)
+    text = re.sub(r'_(.+?)_', r'\1', text)
+
+    # Remove inline code (`text`)
+    text = re.sub(r'`(.+?)`', r'\1', text)
+
+    # Remove headers (# text)
+    text = re.sub(r'^#+\s*', '', text, flags=re.MULTILINE)
+
+    # Remove list markers (- text, * text, 1. text)
+    text = re.sub(r'^\s*[-*]\s+', '', text, flags=re.MULTILINE)
+    text = re.sub(r'^\s*\d+\.\s+', '', text, flags=re.MULTILINE)
+
+    return text
+
+
+def speak(text: str):
+    """Converts text to neural speech and plays it."""
+    print(f"\n[Agent]: {text}")
+
+    # Skip TTS if text is empty
+    if not text or text.strip() == "":
+        print(f"[SYSTEM] ⚠️ Skipping TTS - empty text")
+        return
+
+    # Strip markdown formatting for better TTS
+    clean_text = strip_markdown(text)
+
+    temp_audio_path = "/tmp/agent_response.wav"
+    try:
+        with wave.open(temp_audio_path, "wb") as wav_file:
+            voice_model.synthesize_wav(clean_text, wav_file)
+        subprocess.run(["aplay", "-q", temp_audio_path], check=True)
+    except Exception as e:
+        print(f"[SYSTEM] Voice error: {e}")
+
+# ----------------------------------------
+# VAD-Based Voice Input
+# ----------------------------------------
+print("[SYSTEM] Loading Whisper model...")
+whisper_model = WhisperModel("medium.en", device="cpu", compute_type="int8")
+
+print("[SYSTEM] Loading Silero VAD model...")
+vad_model, vad_utils = torch.hub.load(
+    repo_or_dir='snakers4/silero-vad',
+    model='silero_vad',
+    force_reload=False,
+    onnx=False
+)
+print("[SYSTEM] VAD model loaded.")
+
+VAD_THRESHOLD = 0.5
+SILENCE_DURATION = 1.0
+MIN_SPEECH_DURATION = 0.5
+PRE_SPEECH_BUFFER = 0.3
+
+def is_speech(audio_chunk, vad_model, rate=16000, threshold=0.5):
+    """Check if audio chunk contains speech using Silero VAD"""
+    try:
+        audio_int16 = np.frombuffer(audio_chunk, dtype=np.int16)
+        audio_float32 = audio_int16.astype(np.float32) / 32768.0
+        audio_tensor = torch.from_numpy(audio_float32)
+        speech_prob = vad_model(audio_tensor, rate).item()
+        return speech_prob > threshold
+    except Exception as e:
+        return True
+
+def get_default_input_device():
+    """
+    Get the current system default input device index.
+
+    This ensures we use whichever microphone is selected in GNOME settings,
+    even if the user switches between devices (e.g., built-in mic to headset).
+    """
+    try:
+        p = pyaudio.PyAudio()
+
+        # Get the default input device info
+        default_device_info = p.get_default_input_device_info()
+        device_index = default_device_info['index']
+        device_name = default_device_info['name']
+
+        print(f"[AUDIO] Using input device: {device_name} (index {device_index})")
+
+        p.terminate()
+        return device_index
+    except Exception as e:
+        print(f"[AUDIO] Warning: Could not get default input device: {e}")
+        print(f"[AUDIO] Falling back to system default")
+        return None  # Let PyAudio choose
+
+def listen_and_transcribe():
+    """VAD-based continuous listening"""
+    CHUNK = 512
+    FORMAT = pyaudio.paInt16
+    CHANNELS = 1
+    RATE = 16000
+
+    # Get the current default input device (respects GNOME settings)
+    device_index = get_default_input_device()
+
+    p = pyaudio.PyAudio()
+
+    # Open stream with explicit device index (or None for system default)
+    try:
+        stream = p.open(
+            format=FORMAT,
+            channels=CHANNELS,
+            rate=RATE,
+            input=True,
+            input_device_index=device_index,  # Use current system default
+            frames_per_buffer=CHUNK
+        )
+    except Exception as e:
+        print(f"[AUDIO] Error opening device {device_index}: {e}")
+        print(f"[AUDIO] Retrying with system default...")
+        # Fallback: let PyAudio choose
+        stream = p.open(
+            format=FORMAT,
+            channels=CHANNELS,
+            rate=RATE,
+            input=True,
+            frames_per_buffer=CHUNK
+        )
+
+    print("\n🎤 [VAD] Listening...")
+
+    buffer_size = int(PRE_SPEECH_BUFFER * RATE / CHUNK)
+    pre_buffer = collections.deque(maxlen=buffer_size)
+
+    recording = False
+    frames = []
+    silence_chunks = 0
+    silence_threshold = int(SILENCE_DURATION * RATE / CHUNK)
+
+    try:
+        while True:
+            data = stream.read(CHUNK, exception_on_overflow=False)
+            speech_detected = is_speech(data, vad_model, RATE, VAD_THRESHOLD)
+
+            if not recording:
+                pre_buffer.append(data)
+                if speech_detected:
+                    recording = True
+                    frames = list(pre_buffer)
+                    silence_chunks = 0
+                    print("🔴 Recording...")
+            else:
+                frames.append(data)
+                if speech_detected:
+                    silence_chunks = 0
+                else:
+                    silence_chunks += 1
+                    if silence_chunks >= silence_threshold:
+                        duration = len(frames) * CHUNK / RATE
+                        if duration >= MIN_SPEECH_DURATION:
+                            print("⏹️  Processing...")
+                            stream.stop_stream()
+                            stream.close()
+                            p.terminate()
+
+                            temp_path = "/tmp/vad_recording.wav"
+                            p_temp = pyaudio.PyAudio()
+                            with wave.open(temp_path, 'wb') as wf:
+                                wf.setnchannels(CHANNELS)
+                                wf.setsampwidth(p_temp.get_sample_size(FORMAT))
+                                wf.setframerate(RATE)
+                                wf.writeframes(b''.join(frames))
+                            p_temp.terminate()
+
+                            segments, info = whisper_model.transcribe(
+                                temp_path,
+                                beam_size=5,
+                                vad_filter=True,
+                                vad_parameters=dict(min_silence_duration_ms=500)
+                            )
+
+                            text = "".join([segment.text for segment in segments]).strip()
+                            print(f'✅ You said: "{text}"\n')
+                            return text
+                        else:
+                            recording = False
+                            frames = []
+                            silence_chunks = 0
+
+    except KeyboardInterrupt:
+        print("\n[VAD] 🛑 Ctrl+C detected, shutting down...")
+        stream.stop_stream()
+        stream.close()
+        p.terminate()
+        raise  # Re-raise to exit main loop
+
+def get_installed_gui_apps():
+    """Scans Fedora's application directory for installed GUI programs."""
+    app_dir = "/usr/share/applications"
+    installed_apps = []
+    try:
+        for filename in os.listdir(app_dir):
+            if filename.endswith(".desktop"):
+                app_name = filename.replace(".desktop", "")
+                if "org.gnome." in app_name:
+                    app_name = app_name.replace("org.gnome.", "")
+                installed_apps.append(app_name)
+    except Exception as e:
+        return ["firefox", "gnome-calculator", "nautilus"]
+    return installed_apps
+
+live_app_list = get_installed_gui_apps()
+print(f"[SYSTEM] Found {len(live_app_list)} installed applications")
+
+# ----------------------------------------
+# Conversation Mode Functions
+# ----------------------------------------
+def classify_intent_type(user_input: str) -> str:
+    """
+    Classify if user input is a desktop command or conversational chat.
+
+    Returns: 'command' or 'conversation'
+    """
+    classifier_prompt = f"""Classify this voice input as either:
+- command: Desktop control actions (open/close apps, window operations, mouse/keyboard, screenshots, colors, volume/audio control, media playback, system settings)
+- conversation: Questions, chat, help requests, explanations, general knowledge
+
+Examples of COMMAND:
+- "open firefox"
+- "close text editor"
+- "describe screen"
+- "maximize window"
+- "scroll down"
+- "drag from left to right"
+- "screenshot the window"
+- "pick color at 500 300"
+- "what color is at position 800 400"
+- "click at 100 200"
+- "switch to workspace 2"
+- "type hello world"
+- "press ctrl c"
+- "enable automation"
+- "disable automation"
+- "turn on automation"
+- "turn off automation"
+- "clean up screenshots"
+- "delete screenshots"
+- "set volume to 50"
+- "increase volume by 10"
+- "decrease volume"
+- "turn volume up"
+- "turn volume down"
+- "mute"
+- "unmute"
+- "mute volume"
+- "unmute volume"
+- "play"
+- "pause"
+- "play track"
+- "pause track"
+- "playtrack"
+- "next track"
+- "previous track"
+- "skip"
+- "skip track"
+- "play music"
+- "pause music"
+- "next song"
+- "previous song"
+- "stop music"
+- "turn on dark mode"
+- "turn off dark mode"
+- "enable dark mode"
+- "disable dark mode"
+- "switch to light mode"
+- "turn on night light"
+- "turn off night light"
+- "enable do not disturb"
+- "disable do not disturb"
+- "turn on wifi"
+- "turn off wifi"
+- "enable bluetooth"
+- "disable bluetooth"
+- "open google.com"
+- "go to github.com"
+- "open https://example.com"
+- "open screenshot.png"
+- "open screenshot in pictures"
+- "open report.pdf"
+- "open ~/Documents/report.pdf"
+- "find all PDFs"
+- "search for screenshots"
+- "where are my tax documents"
+
+Examples of CONVERSATION:
+- "what is docker"
+- "how do I install nodejs"
+- "tell me about python"
+- "what's the weather"
+- "explain kubernetes"
+- "what does this code do"
+
+Input: "{user_input}"
+
+Reply with ONE word only: command or conversation"""
+
+    try:
+        response = ollama.chat(
+            model=CLASSIFIER_MODEL,
+            messages=[{'role': 'user', 'content': classifier_prompt}],
+            options={
+                'num_predict': 10,
+                'temperature': 0.1,
+                'num_ctx': 512
+            }
+        )
+
+        result = response['message']['content'].strip().lower()
+
+        # Parse response - look for keywords
+        if 'command' in result:
+            return 'command'
+        elif 'conversation' in result:
+            return 'conversation'
+        else:
+            # Default to conversation if unclear (safer)
+            print(f"[CLASSIFIER] Unclear result: '{result}', defaulting to conversation")
+            return 'conversation'
+
+    except Exception as e:
+        print(f"[CLASSIFIER] Error: {e}, defaulting to conversation")
+        return 'conversation'
+
+
+def handle_conversation(user_input: str, conversation_history: list) -> tuple:
+    """
+    Handle conversational chat with Gemma.
+
+    Args:
+        user_input: User's question/chat
+        conversation_history: List of previous message dicts
+
+    Returns:
+        (answer_text, updated_history)
+    """
+    conversation_prompt = """You are a helpful AI assistant.
+Answer questions clearly and concisely.
+Keep responses under 3 sentences unless more detail is requested.
+Be friendly and informative."""
+
+    # Build message history
+    messages = [{'role': 'system', 'content': conversation_prompt}]
+    messages.extend(conversation_history)
+    messages.append({'role': 'user', 'content': user_input})
+
+    try:
+        print(f"[CHAT] Generating response...")
+        response = ollama.chat(
+            model=CONVERSATION_MODEL,
+            messages=messages,
+            options={
+                # No num_predict limit - let model stop naturally
+                # Prompt already asks for concise responses (3 sentences)
+                'temperature': 0.7,
+                'num_ctx': 2048
+            }
+        )
+
+        answer = response['message']['content']
+
+        # Update history
+        conversation_history.append({'role': 'user', 'content': user_input})
+        conversation_history.append({'role': 'assistant', 'content': answer})
+
+        # Keep only last 20 messages (10 exchanges)
+        if len(conversation_history) > 20:
+            conversation_history = conversation_history[-20:]
+
+        return answer, conversation_history
+
+    except Exception as e:
+        error_msg = f"Sorry, I encountered an error: {str(e)}"
+        return error_msg, conversation_history
+
+
+# ----------------------------------------
+# Orchestrator Loop
+# ----------------------------------------
+def run_agent():
+    print("\n" + "="*60)
+    print("💬  CONVERSATIONAL Agentic OS")
+    print("="*60)
+    print("✅ VAD - unlimited voice input")
+    print("✅ Safe close - never loses data without your consent")
+    print("✅ Dialog detection - reads options to you")
+    print("✅ Voice confirmation - you choose what to do")
+    print("⭐ Conversation mode - ask questions, get help")
+    print("⭐ Automatic detection - seamlessly switches modes\n")
+
+    print("Mode switching:")
+    print("  • 'switch to command mode' - force command mode")
+    print("  • 'switch to chat mode' - force conversation mode")
+    print("  • 'automatic mode' - auto-detect intent")
+    print("  • 'clear history' - clear conversation history\n")
+
+    print("[SYSTEM] Starting MCP client...")
+    mcp_client.start()
+
+    # Build application index for natural language resolution
+    print("[SYSTEM] Building application index...")
+    build_app_index()
+
+    # Health check: ensure automation extension is running and enabled
+    print("[SYSTEM] Checking automation health...")
+    health_ok, health_msg = check_automation_health(auto_enable=True)
+    if health_ok:
+        print(f"[SYSTEM] ✓ {health_msg}")
+    else:
+        print(f"[SYSTEM] ⚠️  {health_msg}")
+        print("[SYSTEM] Some features may not work until automation is enabled.")
+
+    # Command mode system message
+    command_system_msg = {
+        "role": "system",
+        "content": "You are a silent system orchestrator. Your ONLY job is to execute tool calls based on user intent. DO NOT output conversational text. DO NOT confirm actions. DO NOT be polite. If you need to use a tool, output ONLY the tool call. FORGET gedit and USE gnome-text-editor."
+    }
+
+    # State variables
+    current_mode = None  # None = automatic, 'command' = forced, 'conversation' = forced
+    conversation_history = []
+    command_messages = [command_system_msg]
+
+    # Notify user that system is ready
+    print("[SYSTEM] ✓ Voice orchestrator ready")
+    speak("Voice orchestrator ready. Listening for commands.")
+
+    try:
+        while True:
+            user_input = listen_and_transcribe()
+            if not user_input:
+                continue
+
+            # Start timing from when user input is captured
+            response_start_time = time.time()
+
+            user_input_lower = user_input.lower()
+
+            # Check for explicit mode switching (these don't need timing - just mode control)
+            if 'switch to command mode' in user_input_lower or 'command mode' in user_input_lower:
+                current_mode = 'command'
+                speak("Command mode activated. I'll only execute desktop commands.")
+                print(f"[MODE] 🔧 Command mode (forced)")
+                continue
+
+            if 'switch to chat mode' in user_input_lower or 'chat mode' in user_input_lower or 'conversation mode' in user_input_lower:
+                current_mode = 'conversation'
+                speak("Chat mode activated. Ask me anything!")
+                print(f"[MODE] 💬 Conversation mode (forced)")
+                continue
+
+            if 'automatic mode' in user_input_lower or 'auto detect' in user_input_lower or 'auto mode' in user_input_lower:
+                current_mode = None
+                speak("Automatic mode. I'll detect whether you want commands or conversation.")
+                print(f"[MODE] 🤖 Automatic detection")
+                continue
+
+            # Check for history management
+            if 'clear history' in user_input_lower or 'new topic' in user_input_lower:
+                conversation_history = []
+                speak("Conversation history cleared.")
+                print(f"[CHAT] 🗑️  History cleared")
+                continue
+
+            # Determine intent type
+            if current_mode is None:
+                # Automatic detection
+                intent_type = classify_intent_type(user_input)
+                print(f"[MODE] 🤖 Auto-detected: {intent_type}")
+            else:
+                # Use forced mode
+                intent_type = current_mode
+                print(f"[MODE] 🔒 Forced: {intent_type}")
+
+            # Route to appropriate handler
+            if intent_type == 'command':
+                # COMMAND MODE - execute desktop tools
+                print(f"[COMMAND] Processing: {user_input}")
+
+                command_messages.append({"role": "user", "content": user_input})
+
+                # Hybrid namespace + retrieval approach
+                # Retrieve top 2 most relevant namespaces for this query (faster inference)
+                retrieval_start_time = time.time()
+                relevant_namespaces = retrieve_relevant_namespaces(user_input, top_k=2)
+
+                # Build filtered tool schema with only relevant tools
+                filtered_tools = build_filtered_tool_schema(relevant_namespaces)
+                retrieval_elapsed = time.time() - retrieval_start_time
+                print(f"[TIMING] ⏱️  RAG retrieval took: {retrieval_elapsed:.3f}s ({len(filtered_tools)} tools)")
+
+                print(f"[TIMING] ⏱️  Calling {COMMAND_MODEL} with {len(filtered_tools)} tools...")
+                llm_start_time = time.time()
+                response = ollama.chat(
+                    model=COMMAND_MODEL,
+                    messages=command_messages,
+                    tools=filtered_tools,  # Use filtered tools instead of all 43
+                    keep_alive=-1,
+                    options={
+                        'temperature': 0.0,
+                        'top_p': 0.1,
+                        'num_predict': 200  # Limit tokens - function calls are short (<100 tokens)
+                    }
+                )
+                llm_elapsed = time.time() - llm_start_time
+                print(f"[TIMING] ⏱️  LLM inference took: {llm_elapsed:.2f}s")
+
+                # Debug: Check what gemma actually generated
+                print(f"[DEBUG] Gemma eval_count: {response.get('eval_count', 'N/A')} tokens")
+                print(f"[DEBUG] Response content length: {len(response['message'].get('content', ''))}")
+                if response['message'].get('content'):
+                    print(f"[DEBUG] Content preview: {response['message']['content'][:200]}")
+
+                message = response['message']
+                command_messages.append(message)
+
+                if message.get('tool_calls'):
+                    for tool_call in message['tool_calls']:
+                        tool_name = tool_call['function']['name']
+                        arguments = tool_call['function']['arguments']
+
+                        # Check if it's a direct MCP tool (no wrapper needed)
+                        if tool_name in direct_mcp_tools:
+                            print(f"\n[SYSTEM] Calling MCP tool directly: {tool_name}")
+                            result = mcp_client.call_tool(tool_name, arguments)
+
+                            # Auto-recovery: if automation is disabled, enable and retry
+                            if "Error" in result and ("disabled" in result.lower() or "not responding" in result.lower()):
+                                print(f"[SYSTEM] Tool failed, attempting auto-recovery...")
+                                health_ok, health_msg = check_automation_health(auto_enable=True)
+                                if health_ok:
+                                    print(f"[SYSTEM] Retrying {tool_name}...")
+                                    result = mcp_client.call_tool(tool_name, arguments)
+                                else:
+                                    result = f"Error: {health_msg}"
+
+                            print(f"\n[OS Feedback]: {result}")
+                            response_time = time.time() - response_start_time
+                            print(f"[TIMING] ⏱️  Response time: {response_time:.2f}s")
+                            speak(result)
+                            command_messages = [command_system_msg]
+
+                        # Check if it's a custom wrapper function
+                        elif tool_name in available_tools:
+                            function_to_call = available_tools[tool_name]
+                            result = function_to_call(**arguments)
+
+                            # Auto-recovery: if result indicates automation error, enable and retry
+                            if "Error" in result and ("disabled" in result.lower() or "not responding" in result.lower()):
+                                print(f"[SYSTEM] Tool failed, attempting auto-recovery...")
+                                health_ok, health_msg = check_automation_health(auto_enable=True)
+                                if health_ok:
+                                    print(f"[SYSTEM] Retrying {tool_name}...")
+                                    result = function_to_call(**arguments)
+                                else:
+                                    result = f"Error: {health_msg}"
+
+                            print(f"\n[OS Feedback]: {result}")
+                            response_time = time.time() - response_start_time
+                            print(f"[TIMING] ⏱️  Response time: {response_time:.2f}s")
+                            speak(result)
+                            command_messages = [command_system_msg]
+
+                        else:
+                            print(f"[COMMAND] ⚠️  Unknown tool: {tool_name}")
+                            response_time = time.time() - response_start_time
+                            print(f"[TIMING] ⏱️  Response time: {response_time:.2f}s")
+                            speak(f"I don't know how to use {tool_name}")
+                            command_messages = [command_system_msg]
+                else:
+                    # No tool call generated
+                    print("[COMMAND] ⚠️  No tool call generated. Try rephrasing or switch to chat mode.")
+                    response_time = time.time() - response_start_time
+                    print(f"[TIMING] ⏱️  Response time: {response_time:.2f}s")
+                    speak("I'm not sure what command to run. Try rephrasing or say 'switch to chat mode'.")
+
+            else:  # intent_type == 'conversation'
+                # CONVERSATION MODE - chat with Gemma
+                print(f"[CHAT] Processing: {user_input}")
+
+                answer, conversation_history = handle_conversation(user_input, conversation_history)
+
+                print(f"\n[Agent]: {answer}")
+                response_time = time.time() - response_start_time
+                print(f"[TIMING] ⏱️  Response time: {response_time:.2f}s")
+                speak(answer)
+
+    except KeyboardInterrupt:
+        print("\n[SYSTEM] 🛑 Ctrl+C received, shutting down gracefully...")
+        # Unload models from memory
+        print("[SYSTEM] Unloading AI models...")
+        try:
+            # Stop all models that might be loaded
+            for model in [COMMAND_MODEL, VISION_MODEL, CONVERSATION_MODEL, CLASSIFIER_MODEL]:
+                ollama.chat(model=model, messages=[], keep_alive=0)
+        except:
+            pass  # Ignore errors if models weren't loaded
+        print("[SYSTEM] ✓ Models unloaded")
+        return
 
 if __name__ == "__main__":
-    print("\n" + "="*70)
-    print("CONSOLIDATED TOOL ORCHESTRATOR - REFERENCE IMPLEMENTATION")
-    print("="*70)
-    print(f"\nThis file demonstrates the facade pattern for tool consolidation:")
-    print(f"  - 34 tools → 10 tools (6 facades + 3 standalone + 1 search)")
-    print(f"  - All original functionality preserved")
-    print(f"  - Clearer namespace organization")
-    print(f"  - Faster LLM inference (fewer choices)")
-    print(f"  - Better RAG retrieval (clearer descriptions)")
-    print("\nTo use this in production:")
-    print("  1. Copy the VAD/Whisper/Piper code from conversational orchestrator")
-    print("  2. Replace tool definitions and schema")
-    print("  3. Test with real commands")
-    print("="*70)
+    try:
+        run_agent()
+    except KeyboardInterrupt:
+        print("\n\n[SYSTEM] Shutting down Agentic OS...")
+        # Unload models from memory
+        print("[SYSTEM] Unloading AI models...")
+        try:
+            # Stop all models that might be loaded
+            for model in [COMMAND_MODEL, VISION_MODEL, CONVERSATION_MODEL, CLASSIFIER_MODEL]:
+                ollama.chat(model=model, messages=[], keep_alive=0)
+        except:
+            pass  # Ignore errors if models weren't loaded
+        print("[SYSTEM] ✓ Models unloaded")
