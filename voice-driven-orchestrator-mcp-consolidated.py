@@ -863,17 +863,24 @@ def vision_control(action: str, x: int = 0, y: int = 0) -> str:
     """
     **FACADE TOOL**: Unified vision operations.
 
-    Handles screen analysis and display info: describe, pick_color, get_monitors.
+    Handles screen analysis and display info: screenshot, describe, pick_color, get_monitors.
 
     Args:
-        action: describe | pick_color | get_monitors
+        action: screenshot | describe | pick_color | get_monitors
         x, y: Coordinates for pick_color
     """
     print(f"\n[VISION_CONTROL] Action: {action}")
 
     try:
+        # SCREENSHOT (full desktop)
+        if action == "screenshot":
+            result = mcp_client.call_tool("screenshot", {"include_cursor": False, "format": "path"})
+            if result.startswith("Error"):
+                return result
+            return f"Full desktop screenshot saved to {result.strip()}"
+
         # DESCRIBE
-        if action == "describe":
+        elif action == "describe":
             result = mcp_client.call_tool("screenshot", {"include_cursor": False, "format": "path"})
             if result.startswith("Error"):
                 return result
@@ -1094,7 +1101,7 @@ namespaces = {
         "tools": ["gnome_search"]
     },
     "window": {
-        "description": "Managing already running application windows - close windows (close firefox, close nautilus, close text editor, quit application), maximize, minimize, focus, move, resize, restore existing windows. List what windows are currently running. Take window screenshots or area screenshots. NOT for launching new applications.",
+        "description": "Managing already running application windows - close windows (close firefox, close nautilus, close text editor, quit application), maximize, minimize, focus, move, resize, restore existing windows. List what windows are currently running. Take screenshots of specific windows or screen areas. NOT for launching new applications or full desktop screenshots.",
         "tools": ["window_control"]
     },
     "input": {
@@ -1110,7 +1117,7 @@ namespaces = {
         "tools": ["system_settings"]
     },
     "vision": {
-        "description": "Analyzing current screen content, describing what's visible on desktop right now, color picking from display, monitor configuration. Not for opening files or managing screenshots.",
+        "description": "Taking full desktop screenshots, analyzing current screen content, describing what's visible on desktop right now, color picking from display, monitor configuration",
         "tools": ["vision_control"]
     },
     "workspace": {
@@ -1183,7 +1190,7 @@ tool_schema_full = [
     {"type": "function", "function": {"name": "system_settings", "description": "Unified system settings: toggle dark mode, night light, do not disturb, WiFi, Bluetooth, set wallpaper. Handles all quick settings and appearance controls. For wallpaper: can use color names (red, blue, green), wallpaper names (fedora, adwaita), or file paths.", "parameters": {"type": "object", "properties": {"action": {"type": "string", "description": "Setting: dark_mode | night_light | do_not_disturb | wifi | bluetooth | wallpaper"}, "state": {"type": "string", "description": "For toggles: 'on' or 'off'. For wallpaper: color name (red, blue), wallpaper name (fedora), or path", "default": "toggle"}, "path": {"type": "string", "description": "Image path for wallpaper action (alternative to state parameter)", "default": ""}}, "required": ["action"]}}},
 
     # 6. VISION_CONTROL (facade)
-    {"type": "function", "function": {"name": "vision_control", "description": "Unified vision operations: describe what's on screen using AI vision, pick RGB color at screen coordinates, get monitor information (position, resolution, scaling). Handles all screen analysis and display queries. For pick_color: user says 'at 100, 100' or 'at 100-100' or 'at coordinates 100 and 100' means x=100, y=100.", "parameters": {"type": "object", "properties": {"action": {"type": "string", "description": "Action: describe | pick_color | get_monitors"}, "x": {"type": "integer", "description": "X coordinate in pixels for pick_color action. User says '100, 100' or '100-100' means x=100. Must be positive integer >= 1.", "default": 0}, "y": {"type": "integer", "description": "Y coordinate in pixels for pick_color action. User says '100, 100' or '100-100' or 'at 100 and 100' means y=100. Must be positive integer >= 1.", "default": 0}}, "required": ["action"]}}},
+    {"type": "function", "function": {"name": "vision_control", "description": "Unified vision operations: take full desktop screenshot, describe what's on screen using AI vision, pick RGB color at screen coordinates, get monitor information (position, resolution, scaling). Handles all screen analysis and display queries. For pick_color: user says 'at 100, 100' or 'at 100-100' or 'at coordinates 100 and 100' means x=100, y=100.", "parameters": {"type": "object", "properties": {"action": {"type": "string", "description": "Action: screenshot (full desktop) | describe (AI vision) | pick_color | get_monitors"}, "x": {"type": "integer", "description": "X coordinate in pixels for pick_color action. User says '100, 100' or '100-100' means x=100. Must be positive integer >= 1.", "default": 0}, "y": {"type": "integer", "description": "Y coordinate in pixels for pick_color action. User says '100, 100' or '100-100' or 'at 100 and 100' means y=100. Must be positive integer >= 1.", "default": 0}}, "required": ["action"]}}},
 
     # 7. WORKSPACE_CONTROL (facade)
     {"type": "function", "function": {"name": "workspace_control", "description": "Unified workspace management: list all virtual desktops, switch to specific workspace by index (0-based). Handles all multi-desktop operations. NOTE: Workspace numbering is 0-based: 'workspace 1' = index 0, 'workspace 2' = index 1, etc. User says 'workspace ONE' or 'workspace 1' means index=1 (second workspace).", "parameters": {"type": "object", "properties": {"action": {"type": "string", "description": "Action: list | activate"}, "index": {"type": "integer", "description": "Workspace index (0-based integer). User says 'workspace 1' or 'workspace ONE' = use index 1. User says 'workspace 0' or 'first workspace' = use index 0.", "default": 0}}, "required": ["action"]}}},
