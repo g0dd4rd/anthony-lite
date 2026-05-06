@@ -487,7 +487,13 @@ def run_agent():
         if not user_input:
             continue
 
+        # Start timing from when user input is captured
+        response_start_time = time.time()
+
         messages.append({"role": "user", "content": user_input})
+
+        print(f"[TIMING] ⏱️  Calling gemma4:e4b with {len(tool_schema)} tools...")
+        llm_start_time = time.time()
 
         response = ollama.chat(
             model='gemma4:e4b',
@@ -499,6 +505,9 @@ def run_agent():
                 'top_p': 0.1
             }
         )
+
+        llm_elapsed = time.time() - llm_start_time
+        print(f"[TIMING] ⏱️  LLM inference took: {llm_elapsed:.2f}s")
 
         message = response['message']
         messages.append(message)
@@ -516,6 +525,14 @@ def run_agent():
                     speak(result)
 
                     messages = [messages[0]]  # Reset to system prompt only
+
+            # Print total response time
+            response_time = time.time() - response_start_time
+            print(f"[TIMING] ⏱️  Total response time: {response_time:.2f}s")
+        else:
+            # No tool called - just timing info
+            response_time = time.time() - response_start_time
+            print(f"[TIMING] ⏱️  Total response time: {response_time:.2f}s (no tool called)")
 
 if __name__ == "__main__":
     try:
