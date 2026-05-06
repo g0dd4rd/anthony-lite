@@ -2124,10 +2124,13 @@ def run_agent():
 
                 # Hybrid namespace + retrieval approach
                 # Retrieve top 2 most relevant namespaces for this query (faster inference)
+                retrieval_start_time = time.time()
                 relevant_namespaces = retrieve_relevant_namespaces(user_input, top_k=2)
 
                 # Build filtered tool schema with only relevant tools
                 filtered_tools = build_filtered_tool_schema(relevant_namespaces)
+                retrieval_elapsed = time.time() - retrieval_start_time
+                print(f"[TIMING] ⏱️  RAG retrieval took: {retrieval_elapsed:.3f}s ({len(filtered_tools)} tools)")
 
                 print(f"[TIMING] ⏱️  Calling {COMMAND_MODEL} with {len(filtered_tools)} tools...")
                 llm_start_time = time.time()
