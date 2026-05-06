@@ -358,8 +358,112 @@ def build_app_index():
 
     print(f"[SYSTEM] ✓ Indexed {len(app_name_map)} app name mappings ({gnome_count} org.gnome with priority)")
 
-# ----------------------------------------
-# Tool Functions
+def get_installed_gui_apps() -> list:
+    """Get list of installed GUI applications."""
+    apps = set()
+    desktop_dir = "/usr/share/applications"
+
+    if not os.path.isdir(desktop_dir):
+        return []
+
+    for filename in os.listdir(desktop_dir):
+        if filename.endswith('.desktop'):
+            filepath = os.path.join(desktop_dir, filename)
+            try:
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                    for line in content.split('\n'):
+                        if line.startswith('Name='):
+                            app_name = line.split('=', 1)[1].strip()
+                            apps.add(app_name)
+                            break
+            except:
+                continue
+
+    return sorted(list(apps))
+
+def smart_match_window(window_name: str, windows: list) -> dict:
+    """Smart window matching that prioritizes app names over full window titles."""
+    if not window_name or window_name.strip() == "":
+        for w in windows:
+            if w.get('state', {}).get('focused', False):
+                return w
+        return windows[0] if windows else None
+
+    window_name_lower = window_name.lower()
+
+    # Try app name matching first
+    for w in windows:
+        wm_class = w.get('wmClass', '')
+        app_name = wm_class.lower()
+        app_name = app_name.replace('org.gnome.', '')
+        app_name = app_name.replace('org.', '')
+        app_name = app_name.replace('-', '')
+        app_name = app_name.replace('_', '')
+
+        wm_class_lower = wm_class.lower()
+        search_term = window_name_lower.replace(' ', '').replace('-', '').replace('_', '')
+
+        if search_term in app_name or window_name_lower in wm_class_lower:
+            return w
+
+    # Fall back to title matching
+    for w in windows:
+        title = w.get('title', '').lower()
+        if window_name_lower in title:
+            return w
+
+    return None
+
+def get_friendly_app_name(wm_class: str) -> str:
+    """Convert wmClass to friendly app name for voice output."""
+    if not wm_class:
+        return "Unknown App"
+
+    name = wm_class
+    name = name.replace('org.gnome.', '')
+    name = name.replace('org.mozilla.', '')
+    name = name.replace('org.', '')
+    name = name.replace('-', ' ')
+    name = name.replace('_', ' ')
+
+    import re
+    name = re.sub('([a-z])([A-Z])', r'\1 \2', name)
+    name = ' '.join(word.capitalize() for word in name.split())
+
+    return name
+
+def parse_position(position: str, screen_width: int = 1920, screen_height: int = 1080) -> tuple:
+    """Convert natural language position to screen coordinates."""
+    position_lower = position.lower()
+    center_x = screen_width // 2
+    center_y = screen_height // 2
+    left_x = 100
+    right_x = screen_width - 100
+    top_y = 100
+    bottom_y = screen_height - 100
+
+    if "top left" in position_lower:
+        return (left_x, top_y)
+    elif "top right" in position_lower:
+        return (right_x, top_y)
+    elif "top" in position_lower:
+        return (center_x, top_y)
+    elif "bottom left" in position_lower:
+        return (left_x, bottom_y)
+    elif "bottom right" in position_lower:
+        return (right_x, bottom_y)
+    elif "bottom" in position_lower:
+        return (center_x, bottom_y)
+    elif "left" in position_lower:
+        return (left_x, center_y)
+    elif "right" in position_lower:
+        return (right_x, center_y)
+    elif "center" in position_lower or "middle" in position_lower:
+        return (center_x, center_y)
+    else:
+        return (center_x, center_y)
+
 # ========================================
 # 🔥 CONSOLIDATED FACADE TOOLS
 # ========================================
@@ -641,38 +745,6 @@ def input_control(action: str, text: str = "", keys: str = "",
 
     except Exception as e:
         return f"Error in input_control: {str(e)}"
-
-
-def parse_position(position: str, screen_width: int = 1920, screen_height: int = 1080) -> tuple:
-    """Convert natural language position to screen coordinates."""
-    position_lower = position.lower()
-    center_x = screen_width // 2
-    center_y = screen_height // 2
-    left_x = 100
-    right_x = screen_width - 100
-    top_y = 100
-    bottom_y = screen_height - 100
-
-    if "top left" in position_lower:
-        return (left_x, top_y)
-    elif "top right" in position_lower:
-        return (right_x, top_y)
-    elif "top" in position_lower:
-        return (center_x, top_y)
-    elif "bottom left" in position_lower:
-        return (left_x, bottom_y)
-    elif "bottom right" in position_lower:
-        return (right_x, bottom_y)
-    elif "bottom" in position_lower:
-        return (center_x, bottom_y)
-    elif "left" in position_lower:
-        return (left_x, center_y)
-    elif "right" in position_lower:
-        return (right_x, center_y)
-    elif "center" in position_lower or "middle" in position_lower:
-        return (center_x, center_y)
-    else:
-        return (center_x, center_y)
 
 
 def audio_control(action: str, level: int = 0, relative: bool = False) -> str:
