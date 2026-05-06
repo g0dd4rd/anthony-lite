@@ -65,16 +65,16 @@ from dialog_handler import DialogHandler
 # ========================================
 
 # Model for command mode (tool calling)
-COMMAND_MODEL = 'granite3.2-vision:latest'  # Change to 'gemma4:e4b' if needed
+COMMAND_MODEL = 'gemma4:e4b'  # Change to 'gemma4:e4b' if needed
 
 # Model for vision tasks (describe_desktop)
-VISION_MODEL = 'granite3.2-vision:latest'   # Change to 'gemma4:e4b' if needed
+VISION_MODEL = 'gemma4:e4b'   # Change to 'gemma4:e4b' if needed
 
 # Model for conversation mode (chat/questions)
-CONVERSATION_MODEL = 'granite3.2-vision:latest'  # Change to 'gemma4:e4b' if needed
+CONVERSATION_MODEL = 'gemma4:e4b'  # Change to 'gemma4:e4b' if needed
 
 # Model for intent classification (command vs chat detection)
-CLASSIFIER_MODEL = 'granite3.2-vision:latest'  # Change to 'gemma4:e4b' if needed
+CLASSIFIER_MODEL = 'gemma4:e4b'  # Change to 'gemma4:e4b' if needed
 
 # ========================================
 # End of configuration
@@ -2225,6 +2225,15 @@ def run_agent():
 
     except KeyboardInterrupt:
         print("\n[SYSTEM] 🛑 Ctrl+C received, shutting down gracefully...")
+        # Unload models from memory
+        print("[SYSTEM] Unloading AI models...")
+        try:
+            # Stop all models that might be loaded
+            for model in [COMMAND_MODEL, VISION_MODEL, CONVERSATION_MODEL, CLASSIFIER_MODEL]:
+                ollama.chat(model=model, messages=[], keep_alive=0)
+        except:
+            pass  # Ignore errors if models weren't loaded
+        print("[SYSTEM] ✓ Models unloaded")
         return
 
 if __name__ == "__main__":
@@ -2232,3 +2241,12 @@ if __name__ == "__main__":
         run_agent()
     except KeyboardInterrupt:
         print("\n\n[SYSTEM] Shutting down Agentic OS...")
+        # Unload models from memory
+        print("[SYSTEM] Unloading AI models...")
+        try:
+            # Stop all models that might be loaded
+            for model in [COMMAND_MODEL, VISION_MODEL, CONVERSATION_MODEL, CLASSIFIER_MODEL]:
+                ollama.chat(model=model, messages=[], keep_alive=0)
+        except:
+            pass  # Ignore errors if models weren't loaded
+        print("[SYSTEM] ✓ Models unloaded")
