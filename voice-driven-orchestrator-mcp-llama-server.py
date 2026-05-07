@@ -1703,8 +1703,11 @@ def listen_and_transcribe():
                             segments, info = whisper_model.transcribe(
                                 temp_path,
                                 beam_size=5,
+                                temperature=0.0,  # Set explicitly (0.0 = deterministic, 0.1-0.2 = better spacing)
+                                word_timestamps=True,  # Help with word boundary detection
                                 vad_filter=True,
-                                vad_parameters=dict(min_silence_duration_ms=500)
+                                vad_parameters=dict(min_silence_duration_ms=500),
+                                initial_prompt="Commands for opening files, applications, and websites. Files may have spaces in names like 'bugs and ideas.txt' or 'practical presentation advice.txt'."
                             )
 
                             text = "".join([segment.text for segment in segments]).strip()
