@@ -48,6 +48,7 @@ import collections
 import numpy as np
 import torch
 import webcolors
+import argparse
 from queue import Queue
 from sentence_transformers import SentenceTransformer
 
@@ -56,6 +57,15 @@ from piper.voice import PiperVoice
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from dialog_handler import DialogHandler
+
+# Parse command-line arguments
+parser = argparse.ArgumentParser(description='Voice-Driven Desktop Orchestrator')
+parser.add_argument('--ptt', '--push-to-talk', action='store_true',
+                    help='Enable push-to-talk mode (press ENTER to speak)')
+args = parser.parse_args()
+
+# Global PTT mode flag
+PUSH_TO_TALK_MODE = args.ptt
 
 # ========================================
 # 🎯 MODEL CONFIGURATION - LLAMA.CPP SERVER
@@ -1676,20 +1686,31 @@ Be friendly and informative."""
 # ----------------------------------------
 def run_agent():
     print("\n" + "="*60)
-    print("💬  CONVERSATIONAL Agentic OS")
+    if PUSH_TO_TALK_MODE:
+        print("💬  CONVERSATIONAL Agentic OS - PUSH-TO-TALK MODE")
+    else:
+        print("💬  CONVERSATIONAL Agentic OS")
     print("="*60)
     print("✅ VAD - unlimited voice input")
     print("✅ Safe close - never loses data without your consent")
     print("✅ Dialog detection - reads options to you")
     print("✅ Voice confirmation - you choose what to do")
     print("⭐ Conversation mode - ask questions, get help")
-    print("⭐ Automatic detection - seamlessly switches modes\n")
+    print("⭐ Automatic detection - seamlessly switches modes")
+    if PUSH_TO_TALK_MODE:
+        print("🎤 PUSH-TO-TALK - Press ENTER to speak\n")
+    else:
+        print()
 
     print("Mode switching:")
     print("  • 'switch to command mode' - force command mode")
     print("  • 'switch to chat mode' - force conversation mode")
     print("  • 'automatic mode' - auto-detect intent")
-    print("  • 'clear history' - clear conversation history\n")
+    print("  • 'clear history' - clear conversation history")
+    if PUSH_TO_TALK_MODE:
+        print("\n💡 Tip: PTT mode prevents accidental triggering during presentations\n")
+    else:
+        print()
 
     print("[SYSTEM] Starting MCP client...")
     mcp_client.start()
@@ -1720,12 +1741,30 @@ def run_agent():
 
     # Notify user that system is ready
     print("[SYSTEM] ✓ Voice orchestrator ready")
-    speak("Voice orchestrator ready. Listening for commands.")
+    if PUSH_TO_TALK_MODE:
+        print("\n" + "="*60)
+        print("🎤 PUSH-TO-TALK MODE ACTIVE")
+        print("="*60)
+        print("Press ENTER to speak a command")
+        print("Press Ctrl+C to exit\n")
+    else:
+        speak("Voice orchestrator ready. Listening for commands.")
 
     try:
         while True:
+            # PTT mode: wait for Enter key press
+            if PUSH_TO_TALK_MODE:
+                try:
+                    input("🎤 Press ENTER to speak (Ctrl+C to exit): ")
+                except EOFError:
+                    print("\n[SYSTEM] EOF detected, exiting...")
+                    break
+                print("\n[PTT] 🟢 Listening activated...")
+
             user_input = listen_and_transcribe()
             if not user_input:
+                if PUSH_TO_TALK_MODE:
+                    print("[PTT] ⚪ No speech detected, ready for next command\n")
                 continue
 
             # Start timing from when user input is captured
@@ -1880,6 +1919,10 @@ def run_agent():
                 response_time = time.time() - response_start_time
                 print(f"[TIMING] ⏱️  Response time: {response_time:.2f}s")
                 speak(answer)
+
+            # Blank line before next prompt in PTT mode
+            if PUSH_TO_TALK_MODE:
+                print()
 
     except KeyboardInterrupt:
         print("\n[SYSTEM] 🛑 Ctrl+C received, shutting down gracefully...")
