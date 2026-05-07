@@ -24,6 +24,31 @@
   3. Conversation mode ✅
   4. Vision mode (still uses Ollama) ⚠️
 
+## 🤖 Automatic Server Management
+
+The orchestrator now includes automatic llama-server lifecycle management:
+
+**On Startup:**
+1. Checks if llama-server is already running (health check)
+2. If running: Reuses it (saves ~5s startup time)
+3. If not running: Starts it automatically
+4. Waits for server to be ready before proceeding
+
+**On Exit:**
+- **Default:** Keeps server running for next orchestrator session
+- **With `--kill-server`:** Stops server cleanly
+
+**Benefits:**
+- ✅ One-command startup (no manual server management)
+- ✅ Fast restarts (reuses running server)
+- ✅ No stale server processes (optional cleanup)
+- ✅ Automatic recovery (starts server if crashed)
+
+**Why keep server running between sessions?**
+- Model loading takes ~5 seconds
+- GPU initialization takes ~2 seconds
+- Reusing server = instant startup!
+
 ## 📊 Performance Comparison
 
 | Mode | Before (Ollama CPU) | After (llama-server GPU) | Speedup |
@@ -34,14 +59,31 @@
 
 ## 🚀 How to Use
 
-### Start llama-server
+### Automatic Server Management (Recommended)
+The orchestrator now automatically manages llama-server lifecycle!
+
 ```bash
 cd ~/anthony
-./start_llama_server.sh
+# Just run the orchestrator - it starts llama-server automatically
+./voice-driven-orchestrator-mcp-llama-server.py
 ```
 
-Or manually:
+**First run:** Starts llama-server (~5s startup time)  
+**Subsequent runs:** Reuses running server (instant startup!)  
+
+Command-line options:
+- `--restart-server` - Force restart llama-server (useful after model changes)
+- `--kill-server` - Stop llama-server on exit (default: keep running)
+- `--ptt` - Push-to-talk mode (press ENTER to speak)
+
+### Manual Server Management (Optional)
+If you prefer manual control:
+
 ```bash
+# Start manually
+./start_llama_server.sh
+
+# Or with custom parameters
 ~/llama.cpp/build/bin/llama-server \
     --model ~/models/gemma4-e4b-q4km.gguf \
     --ctx-size 4096 \
@@ -53,16 +95,8 @@ Or manually:
     --parallel 1 \
     --cont-batching \
     --flash-attn auto
-```
 
-### Run Updated Orchestrator
-```bash
-cd ~/anthony
-./voice-driven-orchestrator-mcp-llama-server.py
-```
-
-### Stop llama-server
-```bash
+# Stop manually
 pkill llama-server
 ```
 
@@ -108,13 +142,8 @@ response = call_llama_server(
    - Vision commands (describe_desktop) fall back to Ollama CPU
    - This is fine for now since vision is rarely used
 
-2. **llama-server must be running** - The orchestrator will fail if server is down
-   - Check health: `curl http://127.0.0.1:8081/health`
-   - Should return: `{"status":"ok"}`
-
-3. **Port 8081 must be free** - If blocked, change port in both:
-   - `start_llama_server.sh` (--port flag)
-   - `voice-driven-orchestrator-mcp-llama-server.py` (LLAMA_SERVER_URL)
+2. **Port 8081 must be free** - If blocked, change port in:
+   - `voice-driven-orchestrator-mcp-llama-server.py` (LLAMA_SERVER_CONFIG)
 
 ## 🧪 Testing
 

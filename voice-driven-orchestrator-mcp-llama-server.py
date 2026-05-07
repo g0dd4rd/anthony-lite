@@ -62,10 +62,16 @@ from dialog_handler import DialogHandler
 parser = argparse.ArgumentParser(description='Voice-Driven Desktop Orchestrator')
 parser.add_argument('--ptt', '--push-to-talk', action='store_true',
                     help='Enable push-to-talk mode (press ENTER to speak)')
+parser.add_argument('--restart-server', action='store_true',
+                    help='Force restart llama-server even if already running')
+parser.add_argument('--kill-server', action='store_true',
+                    help='Kill llama-server on exit (default: keep running)')
 args = parser.parse_args()
 
-# Global PTT mode flag
+# Global flags
 PUSH_TO_TALK_MODE = args.ptt
+RESTART_SERVER = args.restart_server
+KILL_SERVER_ON_EXIT = args.kill_server
 
 # ========================================
 # 🎯 MODEL CONFIGURATION - LLAMA.CPP SERVER
@@ -79,9 +85,23 @@ PUSH_TO_TALK_MODE = args.ptt
 
 # llama-server endpoint
 LLAMA_SERVER_URL = 'http://127.0.0.1:8081/v1/chat/completions'
+LLAMA_SERVER_HEALTH_URL = 'http://127.0.0.1:8081/health'
 
 # Model name (for API requests - not used by llama-server but required for API format)
 MODEL_NAME = 'gemma4-e4b-q4km'
+
+# llama-server configuration
+LLAMA_SERVER_CONFIG = {
+    'binary': os.path.expanduser('~/llama.cpp/build/bin/llama-server'),
+    'model': os.path.expanduser('~/models/gemma4-e4b-q4km.gguf'),
+    'port': 8081,
+    'host': '127.0.0.1',
+    'ctx_size': 4096,
+    'gpu_layers': 99,
+    'device': 'Vulkan0',
+    'threads': 6,
+    'parallel': 1,
+}
 
 # Use Ollama fallback for vision tasks (llama-server doesn't support vision yet)
 VISION_FALLBACK_OLLAMA = True
@@ -90,6 +110,117 @@ OLLAMA_VISION_MODEL = 'gemma4:e4b'
 # ========================================
 # End of configuration
 # ========================================
+
+# ----------------------------------------
+# llama-server Lifecycle Management
+# ----------------------------------------
+
+# Global variable to track if we started the server
+_server_process = None
+
+def check_server_running():
+    """Check if llama-server is responding"""
+    try:
+        response = requests.get(LLAMA_SERVER_HEALTH_URL, timeout=2)
+        return response.status_code == 200 and response.json().get('status') == 'ok'
+    except:
+        return False
+
+def kill_server():
+    """Kill any running llama-server processes"""
+    try:
+        # Find and kill llama-server processes
+        result = subprocess.run(['pgrep', '-f', 'llama-server.*gemma4-e4b-q4km'],
+                              capture_output=True, text=True)
+        if result.stdout.strip():
+            pids = result.stdout.strip().split('\n')
+            for pid in pids:
+                try:
+                    subprocess.run(['kill', pid], check=False)
+                    print(f"[SERVER] Killed llama-server process (PID {pid})")
+                except:
+                    pass
+            # Wait for processes to die
+            time.sleep(2)
+        return True
+    except Exception as e:
+        print(f"[SERVER] Warning: Could not kill server: {e}")
+        return False
+
+def start_server():
+    """Start llama-server in detached background mode"""
+    global _server_process
+
+    config = LLAMA_SERVER_CONFIG
+
+    # Build command
+    cmd = [
+        config['binary'],
+        '--model', config['model'],
+        '--ctx-size', str(config['ctx_size']),
+        '--n-gpu-layers', str(config['gpu_layers']),
+        '--device', config['device'],
+        '--port', str(config['port']),
+        '--host', config['host'],
+        '--threads', str(config['threads']),
+        '--parallel', str(config['parallel']),
+        '--cont-batching',
+        '--flash-attn', 'auto',
+    ]
+
+    print(f"[SERVER] Starting llama-server on port {config['port']}...")
+    print(f"[SERVER] Model: {config['model']}")
+    print(f"[SERVER] GPU: {config['device']} ({config['gpu_layers']} layers)")
+
+    try:
+        # Start in background, detached from parent process
+        _server_process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True  # Detach from parent
+        )
+
+        # Wait for server to be ready (max 30 seconds)
+        print("[SERVER] Waiting for server to start", end='', flush=True)
+        for i in range(30):
+            time.sleep(1)
+            print('.', end='', flush=True)
+            if check_server_running():
+                print(" ✓")
+                print("[SERVER] llama-server started successfully!")
+                return True
+
+        print(" ✗")
+        print("[SERVER] ⚠️  Server did not respond within 30 seconds")
+        return False
+
+    except Exception as e:
+        print(f"\n[SERVER] ❌ Failed to start server: {e}")
+        return False
+
+def ensure_server_running(force_restart=False):
+    """
+    Ensure llama-server is running, start if needed
+
+    Args:
+        force_restart: If True, restart even if already running
+
+    Returns:
+        True if server is ready, False otherwise
+    """
+    # Check if already running
+    if not force_restart and check_server_running():
+        print("[SERVER] ✓ llama-server already running")
+        return True
+
+    # Force restart requested
+    if force_restart:
+        print("[SERVER] Restarting llama-server (--restart-server flag)...")
+        kill_server()
+
+    # Start server
+    return start_server()
 
 # ----------------------------------------
 # llama-server Helper Functions
@@ -1201,6 +1332,11 @@ namespace_descriptions = [namespaces[ns]["description"] for ns in namespace_name
 namespace_embeddings = embedding_model.encode(namespace_descriptions, convert_to_tensor=True)
 print(f"[SYSTEM] ✓ Loaded embeddings for {len(namespace_names)} namespaces")
 
+# Ensure llama-server is running
+if not ensure_server_running(force_restart=RESTART_SERVER):
+    print("[SERVER] ❌ Failed to start llama-server. Exiting.")
+    sys.exit(1)
+
 def retrieve_relevant_namespaces(user_input: str, top_k: int = 2) -> list:
     """Retrieve most relevant namespaces using semantic similarity."""
     from sentence_transformers.util import cos_sim
@@ -1926,14 +2062,17 @@ def run_agent():
 
     except KeyboardInterrupt:
         print("\n[SYSTEM] 🛑 Ctrl+C received, shutting down gracefully...")
-        print("[SYSTEM] Note: llama-server is still running on port 8081")
-        print("[SYSTEM] Stop it manually if needed: pkill llama-server")
-        return
+    finally:
+        # Cleanup: optionally kill llama-server on exit
+        if KILL_SERVER_ON_EXIT:
+            print("[SYSTEM] Stopping llama-server (--kill-server flag)...")
+            kill_server()
+        else:
+            print("[SYSTEM] Note: llama-server is still running on port 8081")
+            print("[SYSTEM] Reuse it on next run for faster startup, or kill with --kill-server flag")
 
 if __name__ == "__main__":
     try:
         run_agent()
     except KeyboardInterrupt:
         print("\n\n[SYSTEM] Shutting down Agentic OS...")
-        print("[SYSTEM] Note: llama-server is still running on port 8081")
-        print("[SYSTEM] Stop it manually if needed: pkill llama-server")
