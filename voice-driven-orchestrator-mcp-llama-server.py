@@ -405,6 +405,15 @@ def check_automation_health(auto_enable=True) -> tuple[bool, str]:
 app_name_map = {}  # Global app name mapping: term → executable
 app_friendly_name = {}  # Global executable → friendly name
 
+# Keyboard shortcuts that may trigger save dialogs (close app/window/tab)
+# Check for dialogs only on these to avoid performance penalty on other shortcuts
+DIALOG_CHECK_SHORTCUTS = {
+    'Alt+F4',       # Universal window close (GNOME/GTK standard)
+    'Ctrl+Q',       # Quit application (GNOME standard)
+    'Ctrl+W',       # Close tab/document (browsers, editors, terminal tabs)
+    'Ctrl+Shift+W', # Close window (Firefox, Chrome)
+}
+
 def build_app_index():
     """Build index of desktop applications from .desktop files.
 
@@ -893,6 +902,38 @@ def input_control(action: str, text: str = "", keys: str = "",
                 normalized = normalized.replace(" ", "+")
 
             mcp_client.call_tool("key_combo", {"keys": normalized})
+
+            # Check for save dialog if this is a known close shortcut
+            if normalized in DIALOG_CHECK_SHORTCUTS:
+                time.sleep(0.5)  # Give window time to show dialog
+                dialog = dialog_handler.detect_save_dialog(app_name=None, timeout=3.0)
+
+                if dialog:
+                    # Dialog detected - ask user what to do
+                    buttons = dialog['info']['buttons']
+                    button_list = ', '.join([btn['text'] for btn in buttons]) if buttons else "Save, Discard, Cancel"
+                    voice_prompt = f"The window has unsaved changes. Options: {button_list}. What would you like to do?"
+
+                    speak(voice_prompt)
+                    user_choice = listen_and_transcribe()
+
+                    if not user_choice:
+                        speak("No response heard. Canceling close operation.")
+                        mcp_client.call_tool("key_combo", {"keys": "Escape"})
+                        return f"Pressed {normalized} but close operation was canceled (no response to dialog)"
+
+                    success = dialog_handler.activate_button_by_keyboard(dialog, user_choice)
+                    if not success:
+                        speak(f"Could not understand choice {user_choice}")
+                        mcp_client.call_tool("key_combo", {"keys": "Escape"})
+                        return f"Pressed {normalized} but unrecognized dialog choice: {user_choice}"
+
+                    closed = dialog_handler.verify_dialog_closed(dialog, timeout=2.0)
+                    if closed:
+                        return f"Pressed {normalized} and handled save dialog: {user_choice}"
+                    else:
+                        return f"Pressed {normalized} - dialog might still be open"
+
             return f"Pressed {normalized}"
 
         # KEY_PRESS
