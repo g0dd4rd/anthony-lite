@@ -248,12 +248,12 @@ class DialogHandler:
 
         return '. '.join(description_parts)
 
-    def activate_button_by_keyboard(self, dialog_data: Dict, button_choice: str, use_fallback: bool = True) -> bool:
+    def activate_button_by_keyboard(self, dialog_data: Dict, button_choice: str, use_fallback: bool = True, key_callback=None) -> bool:
         """
         Activate dialog button using keyboard shortcuts with Tab/arrow fallback.
 
         Strategy:
-        1. Try Alt+key shortcuts first (<Alt>s/d/c)
+        1. Try Alt+key shortcuts first (Alt+s/d/c)
         2. If that fails (Wayland issue), use Tab/arrow navigation:
            - Tab once lands on Discard (middle button)
            - Left arrow → Cancel, Right arrow → Save
@@ -263,23 +263,22 @@ class DialogHandler:
             dialog_data: Dict from detect_save_dialog()
             button_choice: User's choice (e.g., "save", "discard", "cancel")
             use_fallback: If True, try Tab/arrow navigation if shortcuts fail
+            key_callback: Optional callback function(keys_str) for sending keyboard input.
+                         If None, uses dogtail. If provided, uses callback instead.
 
         Returns:
             True if shortcut was sent, False otherwise
         """
-        from dogtail.rawinput import keyCombo, pressKey
-        from dogtail.utils import doDelay
-
         choice_lower = button_choice.lower()
 
         # Map user choice to keyboard shortcuts and navigation
         shortcuts = {
-            'save': '<Alt>s',
-            'discard': '<Alt>d',
-            'cancel': '<Alt>c',
-            'don\'t save': '<Alt>d',
-            'no': '<Alt>d',
-            'yes': '<Alt>s',
+            'save': 'Alt+s',
+            'discard': 'Alt+d',
+            'cancel': 'Alt+c',
+            'don\'t save': 'Alt+d',
+            'no': 'Alt+d',
+            'yes': 'Alt+s',
         }
 
         # Determine which button to activate
@@ -298,17 +297,27 @@ class DialogHandler:
         shortcut = shortcuts[target_button]
 
         # STRATEGY 1: Try keyboard shortcut (Alt+s/d/c)
-        try:
-            dialog_element = dialog_data['dialog']['element']
-            print(f"[Dialog] Grabbing focus on dialog...")
-            dialog_element.grabFocus()
-            doDelay(0.2)
-        except Exception as e:
-            print(f"[Dialog] Warning: Could not grab focus: {e}")
+        if key_callback:
+            # Use provided keyboard callback (e.g., MCP client)
+            print(f"[Dialog] Trying keyboard shortcut via callback: {shortcut}")
+            key_callback(shortcut)
+            time.sleep(0.5)
+        else:
+            # Use dogtail keyboard input (fallback for standalone usage)
+            from dogtail.rawinput import keyCombo, pressKey
+            from dogtail.utils import doDelay
 
-        print(f"[Dialog] Trying keyboard shortcut: {shortcut}")
-        keyCombo(shortcut)
-        doDelay(0.5)
+            try:
+                dialog_element = dialog_data['dialog']['element']
+                print(f"[Dialog] Grabbing focus on dialog...")
+                dialog_element.grabFocus()
+                doDelay(0.2)
+            except Exception as e:
+                print(f"[Dialog] Warning: Could not grab focus: {e}")
+
+            print(f"[Dialog] Trying keyboard shortcut: <{shortcut.replace('+', '>')}")
+            keyCombo(f"<{shortcut.replace('+', '>')}")
+            doDelay(0.5)
 
         # Check if dialog closed (shortcut worked)
         if not self.verify_dialog_closed(dialog_data, timeout=0.5):
@@ -316,26 +325,52 @@ class DialogHandler:
                 # STRATEGY 2: Fallback to Tab/arrow navigation
                 print(f"[Dialog] Shortcut didn't work, using Tab/arrow fallback...")
 
-                # Tab once to select Discard button (middle)
-                print(f"[Dialog] Pressing Tab to focus Discard button")
-                pressKey('Tab')
-                doDelay(0.2)
+                if key_callback:
+                    # Use callback for Tab/arrow navigation
+                    print(f"[Dialog] Pressing Tab to focus Discard button")
+                    key_callback('Tab')
+                    time.sleep(0.2)
 
-                # Navigate to target button
-                if target_button == 'save':
-                    print(f"[Dialog] Pressing Right arrow to move to Save button")
-                    pressKey('Right')
-                    doDelay(0.2)
-                elif target_button == 'cancel':
-                    print(f"[Dialog] Pressing Left arrow to move to Cancel button")
-                    pressKey('Left')
-                    doDelay(0.2)
-                # For 'discard', we're already there after Tab
+                    # Navigate to target button
+                    if target_button == 'save':
+                        print(f"[Dialog] Pressing Right arrow to move to Save button")
+                        key_callback('Right')
+                        time.sleep(0.2)
+                    elif target_button == 'cancel':
+                        print(f"[Dialog] Pressing Left arrow to move to Cancel button")
+                        key_callback('Left')
+                        time.sleep(0.2)
+                    # For 'discard', we're already there after Tab
 
-                # Press Enter to activate
-                print(f"[Dialog] Pressing Enter to activate {target_button.title()} button")
-                pressKey('Enter')
-                doDelay(0.3)
+                    # Press Enter to activate
+                    print(f"[Dialog] Pressing Return to activate {target_button.title()} button")
+                    key_callback('Return')
+                    time.sleep(0.3)
+                else:
+                    # Use dogtail for Tab/arrow navigation
+                    from dogtail.rawinput import pressKey
+                    from dogtail.utils import doDelay
+
+                    # Tab once to select Discard button (middle)
+                    print(f"[Dialog] Pressing Tab to focus Discard button")
+                    pressKey('Tab')
+                    doDelay(0.2)
+
+                    # Navigate to target button
+                    if target_button == 'save':
+                        print(f"[Dialog] Pressing Right arrow to move to Save button")
+                        pressKey('Right')
+                        doDelay(0.2)
+                    elif target_button == 'cancel':
+                        print(f"[Dialog] Pressing Left arrow to move to Cancel button")
+                        pressKey('Left')
+                        doDelay(0.2)
+                    # For 'discard', we're already there after Tab
+
+                    # Press Enter to activate
+                    print(f"[Dialog] Pressing Enter to activate {target_button.title()} button")
+                    pressKey('Enter')
+                    doDelay(0.3)
             else:
                 print(f"[Dialog] Shortcut may not have worked, fallback disabled")
 

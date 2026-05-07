@@ -350,6 +350,22 @@ mcp_client = MCPClient()
 print("[SYSTEM] Initializing dialog handler...")
 dialog_handler = DialogHandler()
 
+# Helper function for dialog handler to send keyboard input via MCP
+def send_key_via_mcp(keys: str):
+    """
+    Send keyboard input via MCP client (for dialog handler callback).
+
+    Args:
+        keys: Key string like "Alt+s", "Tab", "Return", "Left", "Right"
+    """
+    # Check if it's a combo (contains +) or single key
+    if '+' in keys:
+        # Key combo (e.g., "Alt+s")
+        mcp_client.call_tool("key_combo", {"keys": keys})
+    else:
+        # Single key (e.g., "Tab", "Return", "Left", "Right")
+        mcp_client.call_tool("key_press", {"key": keys})
+
 # Forward declarations for voice functions
 def speak(text: str):
     pass
@@ -773,7 +789,7 @@ def window_control(action: str, window_name: str = "", x: int = 0, y: int = 0,
                 mcp_client.call_tool("key_combo", {"keys": "Escape"})
                 return "Close operation canceled"
 
-            success = dialog_handler.activate_button_by_keyboard(dialog, user_choice)
+            success = dialog_handler.activate_button_by_keyboard(dialog, user_choice, key_callback=send_key_via_mcp)
             if not success:
                 speak(f"Could not understand choice {user_choice}")
                 mcp_client.call_tool("key_combo", {"keys": "Escape"})
@@ -922,7 +938,7 @@ def input_control(action: str, text: str = "", keys: str = "",
                         mcp_client.call_tool("key_combo", {"keys": "Escape"})
                         return f"Pressed {normalized} but close operation was canceled (no response to dialog)"
 
-                    success = dialog_handler.activate_button_by_keyboard(dialog, user_choice)
+                    success = dialog_handler.activate_button_by_keyboard(dialog, user_choice, key_callback=send_key_via_mcp)
                     if not success:
                         speak(f"Could not understand choice {user_choice}")
                         mcp_client.call_tool("key_combo", {"keys": "Escape"})
