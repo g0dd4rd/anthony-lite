@@ -1467,7 +1467,7 @@ def build_filtered_tool_schema(relevant_namespaces: list) -> list:
 
 tool_schema_full = [
     # 1. SEARCH (direct MCP)
-    {"type": "function", "function": {"name": "gnome_search", "description": "Use GNOME search to find and open apps, files, or settings. Opens Activities search, types the query, and presses Enter. GNOME finds and opens the best match automatically.", "parameters": {"type": "object", "properties": {"query": {"type": "string", "description": "Just the app name, file name, or domain. Examples: 'firefox', 'text editor', 'screenshot.png', 'amazon.com', 'wifi'"}}, "required": ["query"]}}},
+    {"type": "function", "function": {"name": "gnome_search", "description": "Find and open apps, files, settings, or websites. For WEBSITES (domains/URLs): append ' website' to query (e.g., 'amazon.com website', 'github.com website'). For APPS and FILES: use query as-is (e.g., 'firefox', 'text editor', 'screenshot.png', 'wifi settings'). The ' website' marker tells the system to open in browser.", "parameters": {"type": "object", "properties": {"query": {"type": "string", "description": "App name, file name, setting, or domain+' website' marker. Examples: 'firefox', 'text editor', 'screenshot.png', 'amazon.com website', 'github.com website', 'wifi'"}}, "required": ["query"]}}},
 
     # 2. WINDOW_CONTROL (facade)
     {"type": "function", "function": {"name": "window_control", "description": "Unified window management: list windows, focus/close/minimize/maximize/restore windows, take window screenshots or area screenshots, move and resize windows. Matches windows by application name (e.g., 'text editor', 'firefox', 'nautilus'). Empty window_name = current window. For move_resize: left half of 1920x1080 screen = x:0, y:0, width:960, height:1080. Right half = x:960, y:0, width:960, height:1080.", "parameters": {"type": "object", "properties": {"action": {"type": "string", "description": "Action to perform: list | focus | close | minimize | maximize | restore | screenshot | screenshot_area | move_resize"}, "window_name": {"type": "string", "description": "Application name (e.g., 'text editor'). Leave empty for current window.", "default": ""}, "x": {"type": "integer", "description": "X position in pixels for move_resize or screenshot_area. Must be integer, NOT percentage.", "default": 0}, "y": {"type": "integer", "description": "Y position in pixels for move_resize or screenshot_area. Must be integer, NOT percentage.", "default": 0}, "width": {"type": "integer", "description": "Width in pixels for move_resize or screenshot_area. Must be integer, NOT percentage. For left/right half: use 960 pixels on 1920 wide screen.", "default": 800}, "height": {"type": "integer", "description": "Height in pixels for move_resize or screenshot_area. Must be integer, NOT percentage. For full height: use 1080 pixels on 1080 tall screen.", "default": 600}, "include_frame": {"type": "boolean", "description": "Include window borders in screenshot", "default": True}}, "required": ["action"]}}},
@@ -2088,7 +2088,28 @@ def run_agent():
                         # Check if it's a direct MCP tool (no wrapper needed)
                         if tool_name in direct_mcp_tools:
                             print(f"\n[SYSTEM] Calling MCP tool directly: {tool_name}")
-                            result = mcp_client.call_tool(tool_name, arguments)
+
+                            # Special handling for gnome_search: check for " website" marker
+                            if tool_name == "gnome_search" and "query" in arguments:
+                                query = arguments["query"].strip()
+
+                                # LLM appends " website" for URLs - use xdg-open for deterministic browser opening
+                                if query.endswith(' website'):
+                                    url = query[:-8].strip()  # Remove " website" suffix
+
+                                    # Add protocol if missing
+                                    if not url.startswith('http://') and not url.startswith('https://'):
+                                        url = f"https://www.{url}"
+
+                                    print(f"[GNOME_SEARCH] Detected website marker, opening URL via xdg-open: {url}")
+                                    subprocess.run(['xdg-open', url], check=False,
+                                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                                    result = f"Opening {url} in browser"
+                                else:
+                                    # Normal GNOME search for apps/files/settings
+                                    result = mcp_client.call_tool(tool_name, arguments)
+                            else:
+                                result = mcp_client.call_tool(tool_name, arguments)
 
                             # Auto-recovery: if automation is disabled, enable and retry
                             if "Error" in result and ("disabled" in result.lower() or "not responding" in result.lower()):
