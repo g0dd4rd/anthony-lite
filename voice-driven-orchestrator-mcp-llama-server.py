@@ -1934,18 +1934,17 @@ def run_agent():
     print("✅ Safe close - never loses data without your consent")
     print("✅ Dialog detection - reads options to you")
     print("✅ Voice confirmation - you choose what to do")
-    print("⭐ Conversation mode - ask questions, get help")
-    print("⭐ Automatic detection - seamlessly switches modes")
+    print("⭐ Command mode (default) - desktop control")
+    print("⭐ Chat mode (optional) - ask questions, get help")
     if PUSH_TO_TALK_MODE:
         print("🎤 PUSH-TO-TALK - Press ENTER to speak\n")
     else:
         print()
 
-    print("Mode switching:")
-    print("  • 'switch to command mode' - force command mode")
-    print("  • 'switch to chat mode' - force conversation mode")
-    print("  • 'automatic mode' - auto-detect intent")
-    print("  • 'clear history' - clear conversation history")
+    print("Mode switching (starts in command mode):")
+    print("  • 'switch to chat mode' - switch to conversation")
+    print("  • 'switch to command mode' - back to commands")
+    print("  • 'clear history' - clear chat history")
     if PUSH_TO_TALK_MODE:
         print("\n💡 Tip: PTT mode prevents accidental triggering during presentations\n")
     else:
@@ -1974,7 +1973,7 @@ def run_agent():
     }
 
     # State variables
-    current_mode = None  # None = automatic, 'command' = forced, 'conversation' = forced
+    current_mode = 'command'  # Start in command mode (explicit switching only)
     conversation_history = []
     command_messages = [command_system_msg]
 
@@ -2014,20 +2013,14 @@ def run_agent():
             # Check for explicit mode switching (these don't need timing - just mode control)
             if 'switch to command mode' in user_input_lower or 'command mode' in user_input_lower:
                 current_mode = 'command'
-                speak("Command mode activated. I'll only execute desktop commands.")
-                print(f"[MODE] 🔧 Command mode (forced)")
+                speak("Command mode. Ready for desktop commands.")
+                print(f"[MODE] 🔧 Command mode")
                 continue
 
             if 'switch to chat mode' in user_input_lower or 'chat mode' in user_input_lower or 'conversation mode' in user_input_lower:
                 current_mode = 'conversation'
                 speak("Chat mode activated. Ask me anything!")
-                print(f"[MODE] 💬 Conversation mode (forced)")
-                continue
-
-            if 'automatic mode' in user_input_lower or 'auto detect' in user_input_lower or 'auto mode' in user_input_lower:
-                current_mode = None
-                speak("Automatic mode. I'll detect whether you want commands or conversation.")
-                print(f"[MODE] 🤖 Automatic detection")
+                print(f"[MODE] 💬 Conversation mode")
                 continue
 
             # Check for history management
@@ -2037,15 +2030,9 @@ def run_agent():
                 print(f"[CHAT] 🗑️  History cleared")
                 continue
 
-            # Determine intent type
-            if current_mode is None:
-                # Automatic detection
-                intent_type = classify_intent_type(user_input)
-                print(f"[MODE] 🤖 Auto-detected: {intent_type}")
-            else:
-                # Use forced mode
-                intent_type = current_mode
-                print(f"[MODE] 🔒 Forced: {intent_type}")
+            # Use current mode (no automatic detection)
+            intent_type = current_mode
+            print(f"[MODE] {intent_type}")
 
             # Route to appropriate handler
             if intent_type == 'command':
