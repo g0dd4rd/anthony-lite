@@ -870,7 +870,12 @@ def window_control(action: str, window_name: str = "", x: int = 0, y: int = 0,
                 "width": width_int,
                 "height": height_int
             })
-            return f"Moved {friendly_name} to ({x_int}, {y_int}) with size {width_int}x{height_int}"
+
+            # Smart feedback: if using default position (0, 0), assume user only wanted to resize
+            if x_int == 0 and y_int == 0:
+                return f"Resized {friendly_name} to {width_int}x{height_int}"
+            else:
+                return f"Moved {friendly_name} to ({x_int}, {y_int}) and resized to {width_int}x{height_int}"
 
         else:
             return f"Unknown window action: {action}"
