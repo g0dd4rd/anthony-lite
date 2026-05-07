@@ -1703,7 +1703,7 @@ def listen_and_transcribe():
                             segments, info = whisper_model.transcribe(
                                 temp_path,
                                 beam_size=5,
-                                temperature=0.0,  # Set explicitly (0.0 = deterministic, 0.1-0.2 = better spacing)
+                                temperature=0.2,  # 0.2 = better spacing and less hallucinations (was 0.0)
                                 word_timestamps=True,  # Help with word boundary detection
                                 vad_filter=True,
                                 vad_parameters=dict(min_silence_duration_ms=500),
