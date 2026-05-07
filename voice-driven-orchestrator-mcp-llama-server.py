@@ -1355,11 +1355,11 @@ direct_mcp_tools = [
 
 namespaces = {
     "search": {
-        "description": "Launch applications, start programs, open files, navigate to websites. Commands like: open firefox, open text editor, start calculator, launch terminal, run files app. Open documents: open screenshot.png, open document.pdf, find image.jpg. Web navigation: go to amazon.com, visit github.com, browse seznam.cz, open google.com. Settings: open wifi settings, bluetooth settings. Use GNOME search to find and launch anything.",
+        "description": "Opening and launching: applications (firefox, text editor, calculator, terminal), files and documents (image.png, document.pdf, report.txt, presentation.pptx), websites (amazon.com, github.com), system settings (wifi, bluetooth). Use for any 'open', 'launch', 'start', 'find' command. Examples: open firefox, open report.pdf, open image.png, launch calculator, go to amazon.com, find settings.",
         "tools": ["gnome_search"]
     },
     "window": {
-        "description": "Managing already running application windows - close windows (close firefox, close nautilus, close text editor, quit application), maximize, minimize, focus, move, resize, restore existing windows. List what windows are currently running. Take screenshots of specific windows or screen areas. NOT for launching new applications or full desktop screenshots.",
+        "description": "Managing already running application windows: close, minimize, maximize, restore, focus, move, resize windows. List currently running windows. Capture window images or screen regions. NOT for launching/opening new apps or files.",
         "tools": ["window_control"]
     },
     "input": {
@@ -1375,7 +1375,7 @@ namespaces = {
         "tools": ["system_settings"]
     },
     "vision": {
-        "description": "Taking full desktop screenshots, analyzing current screen content, describing what's visible on desktop right now, color picking from display, monitor configuration",
+        "description": "Screen analysis and display tools: capture full desktop image, describe current screen content with AI, pick pixel colors at coordinates, get monitor information (resolution, scaling, position)",
         "tools": ["vision_control"]
     },
     "workspace": {
