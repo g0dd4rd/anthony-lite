@@ -1378,10 +1378,20 @@ def send_notification(summary: str, body: str = "", delay: str = "") -> str:
         return f"Error sending notification: {str(e)}"
 
 def cleanup_screenshots() -> str:
-    """Clean up temporary screenshot files."""
+    """Clean up temporary screenshot files by moving them to trash."""
     print(f"\n[SYSTEM] Cleaning up screenshots...")
     try:
         result = mcp_client.call_tool("cleanup_screenshots", {})
+        # Update feedback to clarify files are moved to trash, not deleted permanently
+        if result.startswith("Removed"):
+            # Parse count from "Removed X screenshot files"
+            import re
+            match = re.search(r'Removed (\d+)', result)
+            if match:
+                count = match.group(1)
+                return f"Moved {count} screenshots from Pictures/Screenshots to trash"
+            else:
+                return "Moved screenshots from Pictures/Screenshots to trash"
         return result
     except Exception as e:
         return f"Error cleaning up: {str(e)}"
