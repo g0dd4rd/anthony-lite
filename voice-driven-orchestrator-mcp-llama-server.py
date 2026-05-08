@@ -1350,11 +1350,17 @@ def list_installed_applications() -> str:
     """Lists all installed GUI applications on the system."""
     print(f"\n[SYSTEM] Scanning for installed applications...")
     try:
-        apps = get_installed_gui_apps()
-        app_count = len(apps)
+        app_data = get_installed_gui_apps()
+        app_count = app_data['count']
+        samples = app_data['samples']
+
         if app_count == 0:
             return "No applications found."
-        return f"Found {app_count} installed applications including {', '.join(apps[:5])}, and others."
+
+        if samples:
+            return f"Found {app_count} installed applications including {', '.join(samples)}, and more."
+        else:
+            return f"Found {app_count} installed applications."
     except Exception as e:
         return f"Error listing applications: {str(e)}"
 
@@ -1790,22 +1796,107 @@ def listen_and_transcribe():
         raise  # Re-raise to exit main loop
 
 def get_installed_gui_apps():
-    """Scans Fedora's application directory for installed GUI programs."""
+    """
+    Scans application directory for user-visible GUI programs.
+
+    Returns dict with:
+    - 'count': total user-visible apps
+    - 'samples': representative apps from key categories
+    """
     app_dir = "/usr/share/applications"
-    installed_apps = []
+    categorized_apps = {
+        'browser': [],
+        'text_editor': [],
+        'file_manager': [],
+        'media': [],
+        'graphics': [],
+        'terminal': [],
+        'system_utility': [],
+        'other': []
+    }
+
+    app_count = 0
     try:
         for filename in os.listdir(app_dir):
-            if filename.endswith(".desktop"):
-                app_name = filename.replace(".desktop", "")
-                if "org.gnome." in app_name:
-                    app_name = app_name.replace("org.gnome.", "")
-                installed_apps.append(app_name)
+            if not filename.endswith(".desktop"):
+                continue
+
+            filepath = os.path.join(app_dir, filename)
+            try:
+                with open(filepath, 'r') as f:
+                    content = f.read()
+
+                # Skip if NoDisplay=true (hidden system utilities)
+                if 'NoDisplay=true' in content:
+                    continue
+
+                app_count += 1
+
+                # Extract Name and Categories from [Desktop Entry] section only
+                name = None
+                categories = ""
+                in_desktop_entry = False
+
+                for line in content.split('\n'):
+                    line = line.strip()
+
+                    # Track which section we're in
+                    if line.startswith('['):
+                        in_desktop_entry = (line == '[Desktop Entry]')
+                        continue
+
+                    # Only parse from [Desktop Entry] section
+                    if in_desktop_entry:
+                        if line.startswith('Name='):
+                            name = line.split('=', 1)[1].strip()
+                        elif line.startswith('Categories='):
+                            categories = line.split('=', 1)[1].strip().lower()
+
+                if not name:
+                    continue
+
+                # Categorize
+                if 'browser' in categories or 'webbrowser' in categories:
+                    categorized_apps['browser'].append(name)
+                elif 'texteditor' in categories or 'editor' in categories:
+                    categorized_apps['text_editor'].append(name)
+                elif 'filemanager' in categories:
+                    categorized_apps['file_manager'].append(name)
+                elif 'audio' in categories or 'video' in categories or 'player' in categories:
+                    categorized_apps['media'].append(name)
+                elif 'graphics' in categories or 'image' in categories:
+                    categorized_apps['graphics'].append(name)
+                elif 'terminalemulator' in categories:
+                    categorized_apps['terminal'].append(name)
+                elif 'settings' in categories or 'system' in categories or 'monitor' in categories:
+                    categorized_apps['system_utility'].append(name)
+                else:
+                    categorized_apps['other'].append(name)
+
+            except Exception:
+                continue
+
     except Exception as e:
-        return ["firefox", "gnome-calculator", "nautilus"]
-    return installed_apps
+        # Fallback
+        return {
+            'count': 3,
+            'samples': ['Firefox', 'Text Editor', 'Files']
+        }
+
+    # Build representative samples from key categories
+    samples = []
+    for category in ['browser', 'text_editor', 'file_manager', 'terminal', 'media', 'graphics', 'system_utility']:
+        if categorized_apps[category]:
+            samples.append(categorized_apps[category][0])
+
+    return {
+        'count': app_count,
+        'samples': samples[:7],  # Limit to 7 samples for voice feedback
+        'categorized': categorized_apps
+    }
 
 live_app_list = get_installed_gui_apps()
-print(f"[SYSTEM] Found {len(live_app_list)} installed applications")
+print(f"[SYSTEM] Found {live_app_list['count']} user-visible applications (samples: {', '.join(live_app_list['samples'][:3])})")
 
 # ----------------------------------------
 # Conversation Mode Functions
