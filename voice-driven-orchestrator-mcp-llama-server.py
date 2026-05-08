@@ -66,12 +66,15 @@ parser.add_argument('--restart-server', action='store_true',
                     help='Force restart llama-server even if already running')
 parser.add_argument('--kill-server', action='store_true',
                     help='Kill llama-server on exit (default: keep running)')
+parser.add_argument('--debug', action='store_true',
+                    help='Enable debug output (LLM prompts, tool calls, reasoning)')
 args = parser.parse_args()
 
 # Global flags
 PUSH_TO_TALK_MODE = args.ptt
 RESTART_SERVER = args.restart_server
 KILL_SERVER_ON_EXIT = args.kill_server
+DEBUG = args.debug
 
 # ========================================
 # 🎯 MODEL CONFIGURATION - LLAMA.CPP SERVER
@@ -1229,9 +1232,11 @@ def vision_control(action: str, x: int = 0, y: int = 0) -> str:
 
         # PICK_COLOR
         elif action == "pick_color":
-            print(f"[DEBUG] vision_control received coordinates: x={x}, y={y}, types: x={type(x)}, y={type(y)}")
+            if DEBUG:
+                print(f"[DEBUG] vision_control received coordinates: x={x}, y={y}, types: x={type(x)}, y={type(y)}")
             result = mcp_client.call_tool("pick_color", {"x": x, "y": y})
-            print(f"[DEBUG] pick_color result: {result}")
+            if DEBUG:
+                print(f"[DEBUG] pick_color result: {result}")
 
             # Parse RGB values and convert to color name
             try:
@@ -1256,7 +1261,8 @@ def vision_control(action: str, x: int = 0, y: int = 0) -> str:
                 return f"{color_name} (RGB: {r}, {g}, {b})"
             except Exception as e:
                 # Fallback to raw result if parsing fails
-                print(f"[DEBUG] Color name conversion failed: {e}")
+                if DEBUG:
+                    print(f"[DEBUG] Color name conversion failed: {e}")
                 return result
 
         # GET_MONITORS
@@ -1281,7 +1287,8 @@ def vision_control(action: str, x: int = 0, y: int = 0) -> str:
                     return " ".join(lines)
             except Exception as e:
                 # Fallback to raw JSON if parsing fails
-                print(f"[DEBUG] Monitor formatting failed: {e}")
+                if DEBUG:
+                    print(f"[DEBUG] Monitor formatting failed: {e}")
                 return result
 
         else:
@@ -2058,11 +2065,24 @@ Be friendly and informative."""
 
     try:
         print(f"[CHAT] Generating response...")
+
+        if DEBUG:
+            print(f"[DEBUG] Conversation messages sent to LLM:")
+            for msg in messages:
+                role = msg.get('role', 'unknown')
+                content = msg.get('content', '')
+                if len(content) > 200:
+                    content = content[:200] + "..."
+                print(f"  [{role}]: {content}")
+
         response = call_llama_server(
             messages=messages,
             temperature=0.7,
             max_tokens=500  # Generous limit for conversation
         )
+
+        if DEBUG:
+            print(f"[DEBUG] Response content length: {len(response['message'].get('content', ''))}")
 
         answer = response['message']['content']
 
@@ -2213,6 +2233,17 @@ def run_agent():
                 print(f"[TIMING] ⏱️  RAG retrieval took: {retrieval_elapsed:.3f}s ({len(filtered_tools)} tools)")
 
                 print(f"[TIMING] ⏱️  Calling llama-server with {len(filtered_tools)} tools...")
+
+                if DEBUG:
+                    print(f"[DEBUG] Messages sent to LLM:")
+                    for msg in command_messages:
+                        role = msg.get('role', 'unknown')
+                        content = msg.get('content', '')
+                        if len(content) > 200:
+                            content = content[:200] + "..."
+                        print(f"  [{role}]: {content}")
+                    print(f"[DEBUG] Available tools: {[t['function']['name'] for t in filtered_tools]}")
+
                 llm_start_time = time.time()
                 response = call_llama_server(
                     messages=command_messages,
@@ -2223,11 +2254,15 @@ def run_agent():
                 llm_elapsed = time.time() - llm_start_time
                 print(f"[TIMING] ⏱️  LLM inference took: {llm_elapsed:.2f}s")
 
-                # Debug: Check what gemma actually generated
-                print(f"[DEBUG] Gemma eval_count: {response.get('eval_count', 'N/A')} tokens")
-                print(f"[DEBUG] Response content length: {len(response['message'].get('content', ''))}")
-                if response['message'].get('content'):
-                    print(f"[DEBUG] Content preview: {response['message']['content'][:200]}")
+                if DEBUG:
+                    print(f"[DEBUG] Gemma eval_count: {response.get('eval_count', 'N/A')} tokens")
+                    print(f"[DEBUG] Response content length: {len(response['message'].get('content', ''))}")
+                    if response['message'].get('content'):
+                        print(f"[DEBUG] Content preview: {response['message']['content'][:200]}")
+                    if response['message'].get('tool_calls'):
+                        print(f"[DEBUG] Tool calls:")
+                        for tc in response['message']['tool_calls']:
+                            print(f"  - {tc['function']['name']}: {tc['function']['arguments']}")
 
                 message = response['message']
                 command_messages.append(message)
