@@ -68,6 +68,8 @@ parser.add_argument('--kill-server', action='store_true',
                     help='Kill llama-server on exit (default: keep running)')
 parser.add_argument('--debug', action='store_true',
                     help='Enable debug output (LLM prompts, tool calls, reasoning)')
+parser.add_argument('--log-dir', type=str, default=None,
+                    help='Directory for log files (default: ./logs/)')
 args = parser.parse_args()
 
 # Global flags
@@ -75,6 +77,41 @@ PUSH_TO_TALK_MODE = args.ptt
 RESTART_SERVER = args.restart_server
 KILL_SERVER_ON_EXIT = args.kill_server
 DEBUG = args.debug
+
+# ========================================
+# FILE LOGGING (always active, independent of --debug)
+# ========================================
+import logging
+from logging.handlers import RotatingFileHandler
+
+_log_dir = args.log_dir or os.path.join(os.path.dirname(os.path.abspath(__file__)), 'logs')
+os.makedirs(_log_dir, exist_ok=True)
+_log_file = os.path.join(_log_dir, 'orchestrator.log')
+
+logger = logging.getLogger('orchestrator')
+logger.setLevel(logging.DEBUG)
+
+_file_handler = RotatingFileHandler(
+    _log_file,
+    maxBytes=5 * 1024 * 1024,
+    backupCount=3,
+    encoding='utf-8'
+)
+_file_handler.setFormatter(logging.Formatter(
+    '%(asctime)s | %(levelname)-5s | %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+))
+logger.addHandler(_file_handler)
+
+
+def log_and_print(msg: str, level: str = 'info', console: bool = True):
+    """Log to file always; print to terminal if console=True."""
+    getattr(logger, level)(msg)
+    if console:
+        print(msg)
+
+
+logger.info("=== Orchestrator session started ===")
 
 # ========================================
 # 🎯 MODEL CONFIGURATION - LLAMA.CPP SERVER
@@ -140,14 +177,14 @@ def kill_server():
             for pid in pids:
                 try:
                     subprocess.run(['kill', pid], check=False)
-                    print(f"[SERVER] Killed llama-server process (PID {pid})")
+                    log_and_print(f"[SERVER] Killed llama-server process (PID {pid})")
                 except:
                     pass
             # Wait for processes to die
             time.sleep(2)
         return True
     except Exception as e:
-        print(f"[SERVER] Warning: Could not kill server: {e}")
+        log_and_print(f"[SERVER] Warning: Could not kill server: {e}", level='warning')
         return False
 
 def start_server():
@@ -171,9 +208,9 @@ def start_server():
         '--flash-attn', 'auto',
     ]
 
-    print(f"[SERVER] Starting llama-server on port {config['port']}...")
-    print(f"[SERVER] Model: {config['model']}")
-    print(f"[SERVER] GPU: {config['device']} ({config['gpu_layers']} layers)")
+    log_and_print(f"[SERVER] Starting llama-server on port {config['port']}...")
+    log_and_print(f"[SERVER] Model: {config['model']}")
+    log_and_print(f"[SERVER] GPU: {config['device']} ({config['gpu_layers']} layers)")
 
     try:
         # Start in background, detached from parent process
@@ -185,21 +222,22 @@ def start_server():
         )
 
         # Wait for server to be ready (max 30 seconds)
+        logger.info("[SERVER] Waiting for server to start...")
         print("[SERVER] Waiting for server to start", end='', flush=True)
         for i in range(30):
             time.sleep(1)
             print('.', end='', flush=True)
             if check_server_running():
-                print(" ✓")
-                print("[SERVER] llama-server started successfully!")
+                log_and_print(" ✓")
+                log_and_print("[SERVER] llama-server started successfully!")
                 return True
 
-        print(" ✗")
-        print("[SERVER] ⚠️  Server did not respond within 30 seconds")
+        log_and_print(" ✗")
+        log_and_print("[SERVER] ⚠️  Server did not respond within 30 seconds", level='warning')
         return False
 
     except Exception as e:
-        print(f"\n[SERVER] ❌ Failed to start server: {e}")
+        log_and_print(f"\n[SERVER] ❌ Failed to start server: {e}", level='error')
         return False
 
 def ensure_server_running(force_restart=False):
@@ -214,12 +252,12 @@ def ensure_server_running(force_restart=False):
     """
     # Check if already running
     if not force_restart and check_server_running():
-        print("[SERVER] ✓ llama-server already running")
+        log_and_print("[SERVER] ✓ llama-server already running")
         return True
 
     # Force restart requested
     if force_restart:
-        print("[SERVER] Restarting llama-server (--restart-server flag)...")
+        log_and_print("[SERVER] Restarting llama-server (--restart-server flag)...")
         kill_server()
 
     # Start server
@@ -273,10 +311,10 @@ def call_llama_server(messages, tools=None, temperature=0.0, max_tokens=200):
         return ollama_style
 
     except requests.exceptions.RequestException as e:
-        print(f"[ERROR] llama-server request failed: {e}")
+        log_and_print(f"[ERROR] llama-server request failed: {e}", level='error')
         raise
     except Exception as e:
-        print(f"[ERROR] llama-server error: {e}")
+        log_and_print(f"[ERROR] llama-server error: {e}", level='error')
         raise
 
 
@@ -319,7 +357,7 @@ class MCPClient:
             async with ClientSession(read, write) as session:
                 await session.initialize()
                 self.session = session
-                print("[SYSTEM] MCP connected to gnome-desktop-mcp")
+                log_and_print("[SYSTEM] MCP connected to gnome-desktop-mcp")
 
                 while True:
                     if not self.command_queue.empty():
@@ -350,7 +388,7 @@ class MCPClient:
 mcp_client = MCPClient()
 
 # Initialize dialog handler (auto-checks/enables accessibility)
-print("[SYSTEM] Initializing dialog handler...")
+log_and_print("[SYSTEM] Initializing dialog handler...")
 dialog_handler = DialogHandler()
 
 # Helper function for dialog handler to send keyboard input via MCP
@@ -404,11 +442,11 @@ def check_automation_health(auto_enable=True) -> tuple[bool, str]:
 
         if not is_enabled:
             if auto_enable:
-                print("[SYSTEM] Automation is disabled. Auto-enabling...")
+                log_and_print("[SYSTEM] Automation is disabled. Auto-enabling...")
                 enable_result = mcp_client.call_tool("set_enabled", {"enabled": True})
                 if "Error" in enable_result:
                     return False, f"Failed to enable automation: {enable_result}"
-                print("[SYSTEM] ✓ Automation enabled successfully")
+                log_and_print("[SYSTEM] ✓ Automation enabled successfully")
                 return True, "Automation was disabled but has been auto-enabled"
             else:
                 return False, "Automation is disabled. Say 'enable automation' to turn it on."
@@ -448,7 +486,7 @@ def build_app_index():
     desktop_dir = "/usr/share/applications"
 
     if not os.path.isdir(desktop_dir):
-        print(f"[SYSTEM] Warning: {desktop_dir} not found")
+        log_and_print(f"[SYSTEM] Warning: {desktop_dir} not found", level='warning')
         return
 
     # Parse all desktop files and collect data
@@ -584,7 +622,7 @@ def build_app_index():
             if keyword:
                 app_name_map[keyword.lower()] = exec_name
 
-    print(f"[SYSTEM] ✓ Indexed {len(app_name_map)} app name mappings ({gnome_count} org.gnome with priority)")
+    log_and_print(f"[SYSTEM] ✓ Indexed {len(app_name_map)} app name mappings ({gnome_count} org.gnome with priority)")
 
 def get_installed_gui_apps() -> list:
     """Get list of installed GUI applications."""
@@ -720,7 +758,7 @@ def window_control(action: str, window_name: str = "", x: int = 0, y: int = 0,
         width, height: Size for move_resize or screenshot_area
         include_frame: Include window borders in screenshot
     """
-    print(f"\n[WINDOW_CONTROL] Action: {action}, Window: {window_name or 'current'}")
+    log_and_print(f"\n[WINDOW_CONTROL] Action: {action}, Window: {window_name or 'current'}")
 
     try:
         # LIST action
@@ -958,7 +996,7 @@ def input_control(action: str, text: str = "", keys: str = "",
         amount: Scroll amount (number of times)
         button: Mouse button (1=left, 2=middle, 3=right)
     """
-    print(f"\n[INPUT_CONTROL] Action: {action}")
+    log_and_print(f"\n[INPUT_CONTROL] Action: {action}")
 
     try:
         # TYPE
@@ -1084,7 +1122,7 @@ def audio_control(action: str, level: int = 0, relative: bool = False) -> str:
         level: Volume level (0-100 absolute, or +/- for relative)
         relative: True for relative volume change
     """
-    print(f"\n[AUDIO_CONTROL] Action: {action}")
+    log_and_print(f"\n[AUDIO_CONTROL] Action: {action}")
 
     try:
         # VOLUME
@@ -1131,7 +1169,7 @@ def system_settings(action: str, state: str = "toggle", path: str = "") -> str:
         state: 'on' | 'off' | 'toggle' (for toggles), or color/path (for wallpaper)
         path: Image path (for wallpaper action)
     """
-    print(f"\n[SYSTEM_SETTINGS] Action: {action}, State: {state}")
+    log_and_print(f"\n[SYSTEM_SETTINGS] Action: {action}, State: {state}")
 
     try:
         # WALLPAPER
@@ -1185,7 +1223,7 @@ def vision_control(action: str, x: int = 0, y: int = 0, path: str = "") -> str:
         x, y: Coordinates for pick_color
         path: File path for describe_file
     """
-    print(f"\n[VISION_CONTROL] Action: {action}")
+    log_and_print(f"\n[VISION_CONTROL] Action: {action}")
 
     try:
         # SCREENSHOT (full desktop)
@@ -1243,13 +1281,13 @@ def vision_control(action: str, x: int = 0, y: int = 0, path: str = "") -> str:
         elif action == "describe_file":
             file_path = os.path.expanduser(path)
             if not os.path.isfile(file_path):
-                print(f"[VISION_CONTROL] Exact path not found, searching via localsearch...")
+                log_and_print(f"[VISION_CONTROL] Exact path not found, searching via localsearch...")
                 try:
                     search_result = mcp_client.call_tool("search_files", {"query": os.path.basename(path), "file_type": "files", "limit": 5})
                     results = json.loads(search_result)
                     if results.get("count", 0) > 0:
                         file_path = results["results"][0]
-                        print(f"[VISION_CONTROL] Resolved to: {file_path}")
+                        log_and_print(f"[VISION_CONTROL] Resolved to: {file_path}")
                     else:
                         return f"File not found: {path}"
                 except Exception:
@@ -1286,11 +1324,9 @@ def vision_control(action: str, x: int = 0, y: int = 0, path: str = "") -> str:
 
         # PICK_COLOR
         elif action == "pick_color":
-            if DEBUG:
-                print(f"[DEBUG] vision_control received coordinates: x={x}, y={y}, types: x={type(x)}, y={type(y)}")
+            log_and_print(f"[DEBUG] vision_control received coordinates: x={x}, y={y}, types: x={type(x)}, y={type(y)}", level='debug', console=DEBUG)
             result = mcp_client.call_tool("pick_color", {"x": x, "y": y})
-            if DEBUG:
-                print(f"[DEBUG] pick_color result: {result}")
+            log_and_print(f"[DEBUG] pick_color result: {result}", level='debug', console=DEBUG)
 
             # Parse RGB values and convert to color name
             try:
@@ -1315,8 +1351,7 @@ def vision_control(action: str, x: int = 0, y: int = 0, path: str = "") -> str:
                 return f"{color_name} (RGB: {r}, {g}, {b})"
             except Exception as e:
                 # Fallback to raw result if parsing fails
-                if DEBUG:
-                    print(f"[DEBUG] Color name conversion failed: {e}")
+                log_and_print(f"[DEBUG] Color name conversion failed: {e}", level='debug', console=DEBUG)
                 return result
 
         # GET_MONITORS
@@ -1341,8 +1376,7 @@ def vision_control(action: str, x: int = 0, y: int = 0, path: str = "") -> str:
                     return " ".join(lines)
             except Exception as e:
                 # Fallback to raw JSON if parsing fails
-                if DEBUG:
-                    print(f"[DEBUG] Monitor formatting failed: {e}")
+                log_and_print(f"[DEBUG] Monitor formatting failed: {e}", level='debug', console=DEBUG)
                 return result
 
         else:
@@ -1362,7 +1396,7 @@ def workspace_control(action: str, index: int = 0) -> str:
         action: list | activate
         index: Workspace index (0-based) for activate
     """
-    print(f"\n[WORKSPACE_CONTROL] Action: {action}")
+    log_and_print(f"\n[WORKSPACE_CONTROL] Action: {action}")
 
     try:
         # LIST
@@ -1409,7 +1443,7 @@ def workspace_control(action: str, index: int = 0) -> str:
 
 def list_installed_applications() -> str:
     """Lists all installed GUI applications on the system."""
-    print(f"\n[SYSTEM] Scanning for installed applications...")
+    log_and_print(f"\n[SYSTEM] Scanning for installed applications...")
     try:
         app_data = get_installed_gui_apps()
         app_count = app_data['count']
@@ -1427,7 +1461,7 @@ def list_installed_applications() -> str:
 
 def send_notification(summary: str, body: str = "", delay: str = "") -> str:
     """Send a desktop notification."""
-    print(f"\n[SYSTEM] Sending notification: {summary}")
+    log_and_print(f"\n[SYSTEM] Sending notification: {summary}")
     try:
         result = mcp_client.call_tool("send_notification", {
             "summary": summary,
@@ -1440,7 +1474,7 @@ def send_notification(summary: str, body: str = "", delay: str = "") -> str:
 
 def cleanup_screenshots() -> str:
     """Clean up temporary screenshot files by moving them to trash."""
-    print(f"\n[SYSTEM] Cleaning up screenshots...")
+    log_and_print(f"\n[SYSTEM] Cleaning up screenshots...")
     try:
         result = mcp_client.call_tool("cleanup_screenshots", {})
         # Update feedback to clarify files are moved to trash, not deleted permanently
@@ -1577,18 +1611,18 @@ namespaces = {
 }
 
 # Load embedding model
-print("[SYSTEM] Loading embedding model for tool retrieval...")
+log_and_print("[SYSTEM] Loading embedding model for tool retrieval...")
 embedding_model = SentenceTransformer('all-MiniLM-L6-v2', device='cpu')
 
 # Pre-compute namespace embeddings
 namespace_names = list(namespaces.keys())
 namespace_descriptions = [namespaces[ns]["description"] for ns in namespace_names]
 namespace_embeddings = embedding_model.encode(namespace_descriptions, convert_to_tensor=True)
-print(f"[SYSTEM] ✓ Loaded embeddings for {len(namespace_names)} namespaces")
+log_and_print(f"[SYSTEM] ✓ Loaded embeddings for {len(namespace_names)} namespaces")
 
 # Ensure llama-server is running
 if not ensure_server_running(force_restart=RESTART_SERVER):
-    print("[SERVER] ❌ Failed to start llama-server. Exiting.")
+    log_and_print("[SERVER] ❌ Failed to start llama-server. Exiting.")
     sys.exit(1)
 
 def retrieve_relevant_namespaces(user_input: str, top_k: int = 2) -> tuple:
@@ -1622,7 +1656,7 @@ def retrieve_relevant_namespaces(user_input: str, top_k: int = 2) -> tuple:
                 detected_app = phrase
                 if 'input' not in forced_namespaces:
                     forced_namespaces.append('input')
-                    print(f"[ROUTING] Detected app '{phrase}' → forcing input namespace")
+                    log_and_print(f"[ROUTING] Detected app '{phrase}' → forcing input namespace")
                 break
         else:
             continue
@@ -1646,13 +1680,13 @@ def retrieve_relevant_namespaces(user_input: str, top_k: int = 2) -> tuple:
     # Ensure we return exactly top_k namespaces
     relevant_namespaces = relevant_namespaces[:top_k]
 
-    print(f"[RETRIEVAL] Query: '{user_input}'")
+    log_and_print(f"[RETRIEVAL] Query: '{user_input}'")
     if forced_namespaces:
-        print(f"[ROUTING] Forced namespaces: {forced_namespaces}")
+        log_and_print(f"[ROUTING] Forced namespaces: {forced_namespaces}")
     for i, ns in enumerate(relevant_namespaces):
         score = similarities[namespace_names.index(ns)].item()
         forced_marker = " [FORCED]" if ns in forced_namespaces else ""
-        print(f"  {i+1}. {ns} (score: {score:.3f}) - {len(namespaces[ns]['tools'])} tools{forced_marker}")
+        log_and_print(f"  {i+1}. {ns} (score: {score:.3f}) - {len(namespaces[ns]['tools'])} tools{forced_marker}")
 
     return relevant_namespaces, detected_app
 
@@ -1665,8 +1699,8 @@ def build_filtered_tool_schema(relevant_namespaces: list) -> list:
     filtered_schema = [tool for tool in tool_schema_full
                       if tool["function"]["name"] in relevant_tool_names]
 
-    print(f"[FILTER] Showing {len(filtered_schema)} tools from {len(relevant_namespaces)} namespaces")
-    print(f"  Tools: {[t['function']['name'] for t in filtered_schema]}")
+    log_and_print(f"[FILTER] Showing {len(filtered_schema)} tools from {len(relevant_namespaces)} namespaces")
+    log_and_print(f"  Tools: {[t['function']['name'] for t in filtered_schema]}")
 
     return filtered_schema
 
@@ -1715,17 +1749,17 @@ tool_schema_full = [
 # Initially, use all tools (will be filtered dynamically during execution)
 tool_schema = tool_schema_full
 
-print(f"[SYSTEM] ✓ Consolidated tool schema: {len(tool_schema_full)} tools")
-print(f"[SYSTEM]   - Reduced from 34 individual tools")
-print(f"[SYSTEM]   - Expected performance: ~17-20s inference (vs 41-69s)")
+log_and_print(f"[SYSTEM] ✓ Consolidated tool schema: {len(tool_schema_full)} tools")
+log_and_print(f"[SYSTEM]   - Reduced from 34 individual tools")
+log_and_print(f"[SYSTEM]   - Expected performance: ~17-20s inference (vs 41-69s)")
 
 # ----------------------------------------
 # ----------------------------------------
 # Voice Setup
 # ----------------------------------------
-print("[SYSTEM] Loading Neural Voice...")
+log_and_print("[SYSTEM] Loading Neural Voice...")
 voice_model = PiperVoice.load("en_US-lessac-medium.onnx")
-print("[SYSTEM] Voice ready.")
+log_and_print("[SYSTEM] Voice ready.")
 
 def strip_markdown(text: str) -> str:
     """Remove markdown formatting from text for TTS.
@@ -1762,11 +1796,11 @@ def strip_markdown(text: str) -> str:
 
 def speak(text: str):
     """Converts text to neural speech and plays it."""
-    print(f"\n[Agent]: {text}")
+    log_and_print(f"\n[Agent]: {text}")
 
     # Skip TTS if text is empty
     if not text or text.strip() == "":
-        print(f"[SYSTEM] ⚠️ Skipping TTS - empty text")
+        log_and_print(f"[SYSTEM] ⚠️ Skipping TTS - empty text", level='warning')
         return
 
     # Strip markdown formatting for better TTS
@@ -1778,22 +1812,22 @@ def speak(text: str):
             voice_model.synthesize_wav(clean_text, wav_file)
         subprocess.run(["aplay", "-q", temp_audio_path], check=True)
     except Exception as e:
-        print(f"[SYSTEM] Voice error: {e}")
+        log_and_print(f"[SYSTEM] Voice error: {e}", level='error')
 
 # ----------------------------------------
 # VAD-Based Voice Input
 # ----------------------------------------
-print("[SYSTEM] Loading Whisper model...")
+log_and_print("[SYSTEM] Loading Whisper model...")
 whisper_model = WhisperModel("medium.en", device="cpu", compute_type="int8")
 
-print("[SYSTEM] Loading Silero VAD model...")
+log_and_print("[SYSTEM] Loading Silero VAD model...")
 vad_model, vad_utils = torch.hub.load(
     repo_or_dir='snakers4/silero-vad',
     model='silero_vad',
     force_reload=False,
     onnx=False
 )
-print("[SYSTEM] VAD model loaded.")
+log_and_print("[SYSTEM] VAD model loaded.")
 
 VAD_THRESHOLD = 0.5
 SILENCE_DURATION = 1.0
@@ -1826,13 +1860,13 @@ def get_default_input_device():
         device_index = default_device_info['index']
         device_name = default_device_info['name']
 
-        print(f"[AUDIO] Using input device: {device_name} (index {device_index})")
+        log_and_print(f"[AUDIO] Using input device: {device_name} (index {device_index})")
 
         p.terminate()
         return device_index
     except Exception as e:
-        print(f"[AUDIO] Warning: Could not get default input device: {e}")
-        print(f"[AUDIO] Falling back to system default")
+        log_and_print(f"[AUDIO] Warning: Could not get default input device: {e}", level='warning')
+        log_and_print(f"[AUDIO] Falling back to system default")
         return None  # Let PyAudio choose
 
 def listen_and_transcribe():
@@ -1858,8 +1892,8 @@ def listen_and_transcribe():
             frames_per_buffer=CHUNK
         )
     except Exception as e:
-        print(f"[AUDIO] Error opening device {device_index}: {e}")
-        print(f"[AUDIO] Retrying with system default...")
+        log_and_print(f"[AUDIO] Error opening device {device_index}: {e}", level='error')
+        log_and_print(f"[AUDIO] Retrying with system default...")
         # Fallback: let PyAudio choose
         stream = p.open(
             format=FORMAT,
@@ -1869,7 +1903,7 @@ def listen_and_transcribe():
             frames_per_buffer=CHUNK
         )
 
-    print("\n🎤 [VAD] Listening...")
+    log_and_print("\n🎤 [VAD] Listening...")
 
     buffer_size = int(PRE_SPEECH_BUFFER * RATE / CHUNK)
     pre_buffer = collections.deque(maxlen=buffer_size)
@@ -1890,7 +1924,7 @@ def listen_and_transcribe():
                     recording = True
                     frames = list(pre_buffer)
                     silence_chunks = 0
-                    print("🔴 Recording...")
+                    log_and_print("🔴 Recording...")
             else:
                 frames.append(data)
                 if speech_detected:
@@ -1900,7 +1934,7 @@ def listen_and_transcribe():
                     if silence_chunks >= silence_threshold:
                         duration = len(frames) * CHUNK / RATE
                         if duration >= MIN_SPEECH_DURATION:
-                            print("⏹️  Processing...")
+                            log_and_print("⏹️  Processing...")
                             stream.stop_stream()
                             stream.close()
                             p.terminate()
@@ -1928,8 +1962,8 @@ def listen_and_transcribe():
                             whisper_elapsed = time.time() - whisper_start
 
                             text = "".join([segment.text for segment in segments]).strip()
-                            print(f'⏱️  Whisper transcription: {whisper_elapsed:.2f}s')
-                            print(f'✅ You said: "{text}"\n')
+                            log_and_print(f'⏱️  Whisper transcription: {whisper_elapsed:.2f}s')
+                            log_and_print(f'✅ You said: "{text}"\n')
                             return text
                         else:
                             recording = False
@@ -1937,7 +1971,7 @@ def listen_and_transcribe():
                             silence_chunks = 0
 
     except KeyboardInterrupt:
-        print("\n[VAD] 🛑 Ctrl+C detected, shutting down...")
+        log_and_print("\n[VAD] 🛑 Ctrl+C detected, shutting down...")
         stream.stop_stream()
         stream.close()
         p.terminate()
@@ -2044,7 +2078,7 @@ def get_installed_gui_apps():
     }
 
 live_app_list = get_installed_gui_apps()
-print(f"[SYSTEM] Found {live_app_list['count']} user-visible applications (samples: {', '.join(live_app_list['samples'][:3])})")
+log_and_print(f"[SYSTEM] Found {live_app_list['count']} user-visible applications (samples: {', '.join(live_app_list['samples'][:3])})")
 
 # ----------------------------------------
 # Conversation Mode Functions
@@ -2165,11 +2199,11 @@ Reply with ONE word only: command or conversation"""
             return 'conversation'
         else:
             # Default to conversation if unclear (safer)
-            print(f"[CLASSIFIER] Unclear result: '{result}', defaulting to conversation")
+            log_and_print(f"[CLASSIFIER] Unclear result: '{result}', defaulting to conversation", level='warning')
             return 'conversation'
 
     except Exception as e:
-        print(f"[CLASSIFIER] Error: {e}, defaulting to conversation")
+        log_and_print(f"[CLASSIFIER] Error: {e}, defaulting to conversation")
         return 'conversation'
 
 
@@ -2195,16 +2229,16 @@ Be friendly and informative."""
     messages.append({'role': 'user', 'content': user_input})
 
     try:
-        print(f"[CHAT] Generating response...")
+        log_and_print(f"[CHAT] Generating response...")
 
-        if DEBUG:
-            print(f"[DEBUG] Conversation messages sent to LLM:")
-            for msg in messages:
-                role = msg.get('role', 'unknown')
-                content = msg.get('content', '')
-                if len(content) > 200:
-                    content = content[:200] + "..."
-                print(f"  [{role}]: {content}")
+        debug_lines = ["[DEBUG] Conversation messages sent to LLM:"]
+        for msg in messages:
+            role = msg.get('role', 'unknown')
+            content = msg.get('content', '')
+            if len(content) > 200:
+                content = content[:200] + "..."
+            debug_lines.append(f"  [{role}]: {content}")
+        log_and_print('\n'.join(debug_lines), level='debug', console=DEBUG)
 
         response = call_llama_server(
             messages=messages,
@@ -2212,8 +2246,7 @@ Be friendly and informative."""
             max_tokens=500  # Generous limit for conversation
         )
 
-        if DEBUG:
-            print(f"[DEBUG] Response content length: {len(response['message'].get('content', ''))}")
+        log_and_print(f"[DEBUG] Response content length: {len(response['message'].get('content', ''))}", level='debug', console=DEBUG)
 
         answer = response['message']['content']
 
@@ -2262,21 +2295,23 @@ def run_agent():
     else:
         print()
 
-    print("[SYSTEM] Starting MCP client...")
+    logger.info(f"[SYSTEM] Banner displayed (PTT={PUSH_TO_TALK_MODE})")
+
+    log_and_print("[SYSTEM] Starting MCP client...")
     mcp_client.start()
 
     # Build application index for natural language resolution
-    print("[SYSTEM] Building application index...")
+    log_and_print("[SYSTEM] Building application index...")
     build_app_index()
 
     # Health check: ensure automation extension is running and enabled
-    print("[SYSTEM] Checking automation health...")
+    log_and_print("[SYSTEM] Checking automation health...")
     health_ok, health_msg = check_automation_health(auto_enable=True)
     if health_ok:
-        print(f"[SYSTEM] ✓ {health_msg}")
+        log_and_print(f"[SYSTEM] ✓ {health_msg}")
     else:
-        print(f"[SYSTEM] ⚠️  {health_msg}")
-        print("[SYSTEM] Some features may not work until automation is enabled.")
+        log_and_print(f"[SYSTEM] ⚠️  {health_msg}", level='warning')
+        log_and_print("[SYSTEM] Some features may not work until automation is enabled.", level='warning')
 
     # Command mode system message
     command_system_msg = {
@@ -2290,7 +2325,7 @@ def run_agent():
     command_messages = [command_system_msg]
 
     # Notify user that system is ready
-    print("[SYSTEM] ✓ Voice orchestrator ready")
+    log_and_print("[SYSTEM] ✓ Voice orchestrator ready")
     if PUSH_TO_TALK_MODE:
         print("\n" + "="*60)
         print("🎤 PUSH-TO-TALK MODE ACTIVE")
@@ -2307,7 +2342,7 @@ def run_agent():
                 try:
                     input("🎤 Press ENTER to speak (Ctrl+C to exit): ")
                 except EOFError:
-                    print("\n[SYSTEM] EOF detected, exiting...")
+                    log_and_print("\n[SYSTEM] EOF detected, exiting...")
                     break
                 print("\n[PTT] 🟢 Listening activated...")
 
@@ -2326,30 +2361,31 @@ def run_agent():
             if 'switch to command mode' in user_input_lower or 'command mode' in user_input_lower:
                 current_mode = 'command'
                 speak("Command mode. Ready for desktop commands.")
-                print(f"[MODE] 🔧 Command mode")
+                log_and_print(f"[MODE] 🔧 Command mode")
                 continue
 
             if 'switch to chat mode' in user_input_lower or 'chat mode' in user_input_lower or 'conversation mode' in user_input_lower:
                 current_mode = 'conversation'
                 speak("Chat mode activated. Ask me anything!")
-                print(f"[MODE] 💬 Conversation mode")
+                log_and_print(f"[MODE] 💬 Conversation mode")
                 continue
 
             # Check for history management
             if 'clear history' in user_input_lower or 'new topic' in user_input_lower:
                 conversation_history = []
                 speak("Conversation history cleared.")
-                print(f"[CHAT] 🗑️  History cleared")
+                log_and_print(f"[CHAT] 🗑️  History cleared")
                 continue
 
             # Use current mode (no automatic detection)
             intent_type = current_mode
-            print(f"[MODE] {intent_type}")
+            log_and_print(f"[MODE] {intent_type}")
+            logger.info(f"[INTENT] input={user_input!r} mode={intent_type}")
 
             # Route to appropriate handler
             if intent_type == 'command':
                 # COMMAND MODE - execute desktop tools
-                print(f"[COMMAND] Processing: {user_input}")
+                log_and_print(f"[COMMAND] Processing: {user_input}")
 
                 command_messages.append({"role": "user", "content": user_input})
 
@@ -2363,35 +2399,36 @@ def run_agent():
                     try:
                         focus_result = window_control("focus", detected_app)
                         if "No window found" in focus_result:
-                            print(f"[ROUTING] App '{detected_app}' not running, skipping auto-focus")
+                            log_and_print(f"[ROUTING] App '{detected_app}' not running, skipping auto-focus", level='warning')
                         else:
-                            print(f"[ROUTING] Auto-focused: {focus_result}")
+                            log_and_print(f"[ROUTING] Auto-focused: {focus_result}")
                             command_messages[-1]["content"] += f"\n[{detected_app} is already focused. Do NOT open or search for it.]"
                     except Exception as e:
-                        print(f"[ROUTING] Auto-focus failed: {e}")
+                        log_and_print(f"[ROUTING] Auto-focus failed: {e}")
 
                 # Build filtered tool schema with only relevant tools
                 filtered_tools = build_filtered_tool_schema(relevant_namespaces)
                 retrieval_elapsed = time.time() - retrieval_start_time
-                print(f"[TIMING] ⏱️  RAG retrieval took: {retrieval_elapsed:.3f}s ({len(filtered_tools)} tools)")
+                log_and_print(f"[TIMING] ⏱️  RAG retrieval took: {retrieval_elapsed:.3f}s ({len(filtered_tools)} tools)")
 
                 MAX_CHAIN_STEPS = 5
                 last_tool_result = None
 
                 for chain_step in range(MAX_CHAIN_STEPS):
                     if chain_step > 0:
-                        print(f"[CHAIN] Step {chain_step + 1}/{MAX_CHAIN_STEPS}")
+                        log_and_print(f"[CHAIN] Step {chain_step + 1}/{MAX_CHAIN_STEPS}")
 
-                    if DEBUG:
-                        print(f"[DEBUG] Messages sent to LLM:")
-                        for msg in command_messages:
-                            role = msg.get('role', 'unknown')
-                            content = msg.get('content', '')
-                            if content and len(content) > 200:
-                                content = content[:200] + "..."
-                            print(f"  [{role}]: {content}")
-                        print(f"[DEBUG] Available tools: {[t['function']['name'] for t in filtered_tools]}")
+                    debug_lines = ["[DEBUG] Messages sent to LLM:"]
+                    for msg in command_messages:
+                        role = msg.get('role', 'unknown')
+                        content = msg.get('content', '')
+                        if content and len(content) > 200:
+                            content = content[:200] + "..."
+                        debug_lines.append(f"  [{role}]: {content}")
+                    debug_lines.append(f"[DEBUG] Available tools: {[t['function']['name'] for t in filtered_tools]}")
+                    log_and_print('\n'.join(debug_lines), level='debug', console=DEBUG)
 
+                    logger.info(f"[LLM_REQ] chain_step={chain_step} tools={[t['function']['name'] for t in filtered_tools]} msg_count={len(command_messages)}")
                     llm_start_time = time.time()
                     response = call_llama_server(
                         messages=command_messages,
@@ -2400,17 +2437,18 @@ def run_agent():
                         max_tokens=300
                     )
                     llm_elapsed = time.time() - llm_start_time
-                    print(f"[TIMING] ⏱️  LLM inference took: {llm_elapsed:.2f}s")
+                    log_and_print(f"[TIMING] ⏱️  LLM inference took: {llm_elapsed:.2f}s")
+                    logger.info(f"[LLM_RESP] inference={llm_elapsed:.2f}s tokens={response.get('eval_count', 'N/A')} has_tool_calls={bool(response['message'].get('tool_calls'))}")
 
-                    if DEBUG:
-                        print(f"[DEBUG] Gemma eval_count: {response.get('eval_count', 'N/A')} tokens")
-                        print(f"[DEBUG] Response content length: {len(response['message'].get('content', ''))}")
-                        if response['message'].get('content'):
-                            print(f"[DEBUG] Content preview: {response['message']['content'][:200]}")
-                        if response['message'].get('tool_calls'):
-                            print(f"[DEBUG] Tool calls:")
-                            for tc in response['message']['tool_calls']:
-                                print(f"  - {tc['function']['name']}: {tc['function']['arguments']}")
+                    debug_lines = [f"[DEBUG] Gemma eval_count: {response.get('eval_count', 'N/A')} tokens"]
+                    debug_lines.append(f"[DEBUG] Response content length: {len(response['message'].get('content', ''))}")
+                    if response['message'].get('content'):
+                        debug_lines.append(f"[DEBUG] Content preview: {response['message']['content'][:200]}")
+                    if response['message'].get('tool_calls'):
+                        debug_lines.append("[DEBUG] Tool calls:")
+                        for tc in response['message']['tool_calls']:
+                            debug_lines.append(f"  - {tc['function']['name']}: {tc['function']['arguments']}")
+                    log_and_print('\n'.join(debug_lines), level='debug', console=DEBUG)
 
                     message = response['message']
                     command_messages.append(message)
@@ -2419,19 +2457,19 @@ def run_agent():
                         # LLM returned text — final answer
                         content = message.get('content', '').strip()
                         if content:
-                            print(f"\n[OS Feedback]: {content}")
+                            log_and_print(f"\n[OS Feedback]: {content}")
                             response_time = time.time() - response_start_time
-                            print(f"[TIMING] ⏱️  Response time: {response_time:.2f}s")
+                            log_and_print(f"[TIMING] ⏱️  Response time: {response_time:.2f}s")
                             speak(content)
                         elif last_tool_result:
-                            print(f"\n[OS Feedback]: {last_tool_result}")
+                            log_and_print(f"\n[OS Feedback]: {last_tool_result}")
                             response_time = time.time() - response_start_time
-                            print(f"[TIMING] ⏱️  Response time: {response_time:.2f}s")
+                            log_and_print(f"[TIMING] ⏱️  Response time: {response_time:.2f}s")
                             speak(last_tool_result)
                         else:
-                            print("[COMMAND] ⚠️  No tool call generated. Try rephrasing or switch to chat mode.")
+                            log_and_print("[COMMAND] ⚠️  No tool call generated. Try rephrasing or switch to chat mode.", level='warning')
                             response_time = time.time() - response_start_time
-                            print(f"[TIMING] ⏱️  Response time: {response_time:.2f}s")
+                            log_and_print(f"[TIMING] ⏱️  Response time: {response_time:.2f}s")
                             speak("I'm not sure what command to run. Try rephrasing or say 'switch to chat mode'.")
                         break
 
@@ -2448,7 +2486,7 @@ def run_agent():
 
                         # Check if it's a direct MCP tool (no wrapper needed)
                         if tool_name in direct_mcp_tools:
-                            print(f"\n[SYSTEM] Calling MCP tool directly: {tool_name}")
+                            log_and_print(f"\n[SYSTEM] Calling MCP tool directly: {tool_name}")
 
                             # Special handling for gnome_search: check for markers
                             if tool_name == "gnome_search" and "query" in arguments:
@@ -2462,7 +2500,7 @@ def run_agent():
                                     if not url.startswith('http://') and not url.startswith('https://'):
                                         url = f"https://www.{url}"
 
-                                    print(f"[GNOME_SEARCH] Detected website marker, opening URL via xdg-open: {url}")
+                                    log_and_print(f"[GNOME_SEARCH] Detected website marker, opening URL via xdg-open: {url}")
                                     subprocess.run(['xdg-open', url], check=False,
                                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                                     result = f"Opening {url} in browser"
@@ -2471,7 +2509,7 @@ def run_agent():
                                 elif query.endswith(' file'):
                                     filename = query[:-5].strip()  # Remove " file" suffix
 
-                                    print(f"[GNOME_SEARCH] Detected file marker, using open_file: {filename}")
+                                    log_and_print(f"[GNOME_SEARCH] Detected file marker, using open_file: {filename}")
                                     result = mcp_client.call_tool("open_file", {"path": filename})
 
                                 else:
@@ -2482,10 +2520,10 @@ def run_agent():
 
                             # Auto-recovery: if automation is disabled, enable and retry
                             if "Error" in result and ("disabled" in result.lower() or "not responding" in result.lower()):
-                                print(f"[SYSTEM] Tool failed, attempting auto-recovery...")
+                                log_and_print(f"[SYSTEM] Tool failed, attempting auto-recovery...")
                                 health_ok, health_msg = check_automation_health(auto_enable=True)
                                 if health_ok:
-                                    print(f"[SYSTEM] Retrying {tool_name}...")
+                                    log_and_print(f"[SYSTEM] Retrying {tool_name}...")
                                     result = mcp_client.call_tool(tool_name, arguments)
                                 else:
                                     result = f"Error: {health_msg}"
@@ -2497,19 +2535,21 @@ def run_agent():
 
                             # Auto-recovery: if result indicates automation error, enable and retry
                             if "Error" in result and ("disabled" in result.lower() or "not responding" in result.lower()):
-                                print(f"[SYSTEM] Tool failed, attempting auto-recovery...")
+                                log_and_print(f"[SYSTEM] Tool failed, attempting auto-recovery...")
                                 health_ok, health_msg = check_automation_health(auto_enable=True)
                                 if health_ok:
-                                    print(f"[SYSTEM] Retrying {tool_name}...")
+                                    log_and_print(f"[SYSTEM] Retrying {tool_name}...")
                                     result = function_to_call(**arguments)
                                 else:
                                     result = f"Error: {health_msg}"
 
                         else:
                             result = f"Unknown tool: {tool_name}"
-                            print(f"[COMMAND] ⚠️  {result}")
+                            log_and_print(f"[COMMAND] ⚠️  {result}", level='warning')
 
-                        print(f"\n[OS Feedback]: {result}")
+                        log_and_print(f"\n[OS Feedback]: {result}")
+                        logger.info(f"[TOOL_EXEC] tool={tool_name} args={arguments} result_len={len(str(result))}")
+                        logger.debug(f"[TOOL_RESULT] tool={tool_name} result={str(result)[:500]}")
                         last_tool_result = result
 
                         # Append tool result to messages so LLM can chain
@@ -2521,25 +2561,25 @@ def run_agent():
 
                 else:
                     # Exhausted MAX_CHAIN_STEPS — speak whatever we have
-                    print(f"[CHAIN] ⚠️  Reached max chain steps ({MAX_CHAIN_STEPS})")
+                    log_and_print(f"[CHAIN] ⚠️  Reached max chain steps ({MAX_CHAIN_STEPS})", level='warning')
                     if last_tool_result:
                         response_time = time.time() - response_start_time
-                        print(f"[TIMING] ⏱️  Response time: {response_time:.2f}s")
+                        log_and_print(f"[TIMING] ⏱️  Response time: {response_time:.2f}s")
                         speak(last_tool_result)
 
                 response_time = time.time() - response_start_time
-                print(f"[TIMING] ⏱️  Total chain time: {response_time:.2f}s")
+                log_and_print(f"[TIMING] ⏱️  Total chain time: {response_time:.2f}s")
                 command_messages = [command_system_msg]
 
             else:  # intent_type == 'conversation'
                 # CONVERSATION MODE - chat with Gemma
-                print(f"[CHAT] Processing: {user_input}")
+                log_and_print(f"[CHAT] Processing: {user_input}")
 
                 answer, conversation_history = handle_conversation(user_input, conversation_history)
 
-                print(f"\n[Agent]: {answer}")
+                log_and_print(f"\n[Agent]: {answer}")
                 response_time = time.time() - response_start_time
-                print(f"[TIMING] ⏱️  Response time: {response_time:.2f}s")
+                log_and_print(f"[TIMING] ⏱️  Response time: {response_time:.2f}s")
                 speak(answer)
 
             # Blank line before next prompt in PTT mode
@@ -2547,18 +2587,19 @@ def run_agent():
                 print()
 
     except KeyboardInterrupt:
-        print("\n[SYSTEM] 🛑 Ctrl+C received, shutting down gracefully...")
+        log_and_print("\n[SYSTEM] 🛑 Ctrl+C received, shutting down gracefully...")
+        logger.info("=== Orchestrator session ended ===")
     finally:
         # Cleanup: optionally kill llama-server on exit
         if KILL_SERVER_ON_EXIT:
-            print("[SYSTEM] Stopping llama-server (--kill-server flag)...")
+            log_and_print("[SYSTEM] Stopping llama-server (--kill-server flag)...")
             kill_server()
         else:
-            print("[SYSTEM] Note: llama-server is still running on port 8081")
-            print("[SYSTEM] Reuse it on next run for faster startup, or kill with --kill-server flag")
+            log_and_print("[SYSTEM] Note: llama-server is still running on port 8081")
+            log_and_print("[SYSTEM] Reuse it on next run for faster startup, or kill with --kill-server flag")
 
 if __name__ == "__main__":
     try:
         run_agent()
     except KeyboardInterrupt:
-        print("\n\n[SYSTEM] Shutting down Agentic OS...")
+        log_and_print("\n\n[SYSTEM] Shutting down Agentic OS...")
