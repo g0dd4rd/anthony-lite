@@ -652,7 +652,7 @@ def smart_match_window(window_name: str, windows: list) -> dict:
     """Smart window matching that prioritizes app names over full window titles."""
     if not window_name or window_name.strip() == "":
         for w in windows:
-            if w.get('state', {}).get('focused', False):
+            if w.get('focused', False):
                 return w
         return windows[0] if windows else None
 
@@ -1517,6 +1517,11 @@ def get_app_shortcuts(app_name: str) -> str:
             "document viewer": "papers",
             "pdf viewer": "papers",
             "terminal": "ptyxis",
+            "videos": "showtime",
+            "video player": "showtime",
+            "gnome videos": "showtime",
+            "system monitor": "system-monitor",
+            "gnome system monitor": "system-monitor",
         }
         lookup_key = alias_map.get(app_lower, app_lower)
         if lookup_key in curated:
@@ -1529,6 +1534,9 @@ def get_app_shortcuts(app_name: str) -> str:
     if gs_shortcuts:
         shortcuts.update(gs_shortcuts)
 
+    # Extract skills before filtering metadata
+    skills = shortcuts.pop("_skills", None)
+
     # Filter out metadata fields
     shortcuts = {k: v for k, v in shortcuts.items() if not k.startswith("_")}
 
@@ -1538,6 +1546,14 @@ def get_app_shortcuts(app_name: str) -> str:
     lines = [f"Shortcuts for {app_name}:"]
     for action, shortcut in shortcuts.items():
         lines.append(f"- {action}: {shortcut}")
+
+    if skills:
+        lines.append("")
+        lines.append("Skills (execute steps in order, look up shortcuts above):")
+        for skill_name, steps in skills.items():
+            steps_str = " → ".join(steps)
+            lines.append(f"- {skill_name}: {steps_str}")
+
     return "\n".join(lines)
 
 
@@ -2413,6 +2429,40 @@ def run_agent():
                             command_messages[-1]["content"] += f"\n[{detected_app} is already focused. Do NOT open or search for it.]"
                     except Exception as e:
                         log_and_print(f"[ROUTING] Auto-focus failed: {e}")
+
+                    # Pre-fetch shortcuts+skills so the LLM doesn't have to call get_app_shortcuts
+                    try:
+                        shortcut_info = get_app_shortcuts(detected_app)
+                        if not shortcut_info.startswith("No shortcuts"):
+                            command_messages[-1]["content"] += f"\n[{shortcut_info}]"
+                            log_and_print(f"[ROUTING] Injected shortcuts+skills for '{detected_app}'")
+                    except Exception as e:
+                        log_and_print(f"[ROUTING] Failed to inject shortcuts: {e}")
+                else:
+                    # No app mentioned — check focused window for shortcut context
+                    try:
+                        result = mcp_client.call_tool("list_windows", {})
+                        if not result.startswith("Error"):
+                            windows = json.loads(result)
+                            focused = next((w for w in windows if w.get('focused', False)), None)
+                            if focused:
+                                wm_class = focused.get('wmClass', '')
+                                # Strip org.gnome. / org.mozilla. prefixes to get shortcut key
+                                shortcut_key = wm_class.lower()
+                                for prefix in ('org.gnome.', 'org.mozilla.', 'org.'):
+                                    if shortcut_key.startswith(prefix):
+                                        shortcut_key = shortcut_key[len(prefix):]
+                                        break
+                                shortcut_info = get_app_shortcuts(shortcut_key)
+                                if not shortcut_info.startswith("No shortcuts"):
+                                    friendly = get_friendly_app_name(wm_class)
+                                    command_messages[-1]["content"] += f"\n[{friendly} is focused. {shortcut_info}]"
+                                    log_and_print(f"[ROUTING] Injected shortcuts for focused app '{shortcut_key}'")
+                                    # Force input namespace so input_control is available
+                                    if 'input' not in [ns for ns in relevant_namespaces]:
+                                        relevant_namespaces.append('input')
+                    except Exception as e:
+                        log_and_print(f"[ROUTING] Focused-window shortcut lookup failed: {e}")
 
                 # Build filtered tool schema with only relevant tools
                 filtered_tools = build_filtered_tool_schema(relevant_namespaces)

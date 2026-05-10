@@ -9,39 +9,68 @@
     "Reopen closed tab": "Ctrl+Shift+T",
     "Next tab": "Ctrl+Page_Down",
     "Previous tab": "Ctrl+Page_Up",
+    "Go to tab 1-8": "Ctrl+1 to Ctrl+8",
+    "Go to last tab": "Ctrl+9",
     "New window": "Ctrl+N",
     "Private window": "Ctrl+Shift+P",
     "Close window": "Ctrl+Shift+W",
+    "Quit": "Ctrl+Q",
     "Find in page": "Ctrl+F",
     "Find next": "Ctrl+G",
     "Find previous": "Ctrl+Shift+G",
+    "Quick find": "/",
     "Refresh": "Ctrl+R",
     "Refresh bypass cache": "Ctrl+Shift+R",
     "Stop loading": "Escape",
     "Back": "Alt+Left",
     "Forward": "Alt+Right",
     "Home": "Alt+Home",
+    "Open file": "Ctrl+O",
     "Bookmark page": "Ctrl+D",
+    "Bookmark all tabs": "Ctrl+Shift+D",
     "Bookmarks sidebar": "Ctrl+B",
+    "Show bookmarks toolbar": "Ctrl+Shift+B",
+    "Show all bookmarks": "Ctrl+Shift+O",
     "History sidebar": "Ctrl+H",
+    "History library": "Ctrl+Shift+H",
+    "Clear recent history": "Ctrl+Shift+Delete",
     "Downloads": "Ctrl+J",
+    "Add-ons": "Ctrl+Shift+A",
     "Print": "Ctrl+P",
     "Save page": "Ctrl+S",
+    "Take screenshot": "Ctrl+Shift+S",
     "Full screen": "F11",
     "Reader mode": "Ctrl+Alt+R",
+    "Caret browsing": "F7",
     "Zoom in": "Ctrl+Plus",
     "Zoom out": "Ctrl+Minus",
     "Reset zoom": "Ctrl+0",
+    "Page down": "Space",
+    "Page up": "Shift+Space",
+    "Go to top of page": "Home",
+    "Go to bottom of page": "End",
     "View source": "Ctrl+U",
+    "Page info": "Ctrl+I",
     "Developer tools": "F12",
     "Web console": "Ctrl+Shift+K",
     "Inspector": "Ctrl+Shift+C",
+    "Network monitor": "Ctrl+Shift+E",
+    "Responsive design": "Ctrl+Shift+M",
+    "Task manager": "Shift+Escape",
     "Mute tab": "Ctrl+M",
     "Select all": "Ctrl+A",
     "Copy": "Ctrl+C",
+    "Cut": "Ctrl+X",
     "Paste": "Ctrl+V",
+    "Paste as plain text": "Ctrl+Shift+V",
     "Undo": "Ctrl+Z",
-    "Redo": "Ctrl+Shift+Z"
+    "Redo": "Ctrl+Shift+Z",
+    "_skills": {
+      "Search the web": ["Focus the address bar", "Type the search query", "Press Enter"],
+      "Browse to a URL": ["Focus the address bar", "Type the URL", "Press Enter"],
+      "Open new tab and search": ["Open a new tab", "Type the search query", "Press Enter"],
+      "Find text on page": ["Open find in page", "Type the search text"]
+    }
   },
   "text-editor": {
     "_version": "50.0",
@@ -58,7 +87,12 @@
     "Select all": "Ctrl+A",
     "Close": "Ctrl+W",
     "Show keyboard shortcuts": "Ctrl+Question",
-    "Preferences": "Ctrl+Comma"
+    "Preferences": "Ctrl+Comma",
+    "_skills": {
+      "Find text": ["Open find", "Type the search text"],
+      "Find and replace": ["Open find and replace", "Type the search text", "Tab to the replace field", "Type the replacement"],
+      "Open a recent file": ["Search recent files", "Type the filename"]
+    }
   },
   "nautilus": {
     "_version": "50.1",
@@ -96,7 +130,12 @@
     "Zoom out": "Ctrl+Minus",
     "Reset zoom": "Ctrl+0",
     "Refresh": "Ctrl+R",
-    "Toggle sidebar": "F9"
+    "Toggle sidebar": "F9",
+    "_skills": {
+      "Navigate to a path": ["Open the location bar", "Type the path", "Press Enter"],
+      "Create a new folder": ["Create folder", "Type the folder name", "Press Enter"],
+      "Search for a file": ["Open search", "Type the filename"]
+    }
   },
   "loupe": {
     "_version": "50.0",
@@ -132,6 +171,72 @@
     "Go to page": "Ctrl+L",
     "Rotate clockwise": "Ctrl+Right",
     "Rotate counterclockwise": "Ctrl+Left",
+    "Show keyboard shortcuts": "Ctrl+Question"
+  },
+  "ptyxis": {
+    "_version": "48.0",
+    "_source": "gsettings org.gnome.Ptyxis.Shortcuts + BDD feature files",
+    "New tab": "Ctrl+Shift+T",
+    "Close tab": "Ctrl+Shift+W",
+    "New window": "Ctrl+Shift+N",
+    "Close window": "Ctrl+Shift+Q",
+    "Copy": "Ctrl+Shift+C",
+    "Paste": "Ctrl+Shift+V",
+    "Select all": "Ctrl+Shift+A",
+    "Find": "Ctrl+Shift+F",
+    "Next tab": "Ctrl+Page_Down",
+    "Previous tab": "Ctrl+Page_Up",
+    "Undo close tab": "Ctrl+Shift+Alt+T",
+    "Tab overview": "Ctrl+Shift+O",
+    "Zoom in": "Ctrl+Plus",
+    "Zoom out": "Ctrl+Minus",
+    "Reset zoom": "Ctrl+0",
+    "Full screen": "F11",
+    "Preferences": "Ctrl+Comma",
+    "Show keyboard shortcuts": "Ctrl+Question",
+    "_skills": {
+      "Search terminal output": ["Open find", "Type the search text"]
+    }
+  },
+  "calculator": {
+    "_version": "48.0",
+    "_source": "In-app shortcut dialog (Ctrl+?) + GNOME help pages",
+    "Copy": "Ctrl+C",
+    "Paste": "Ctrl+V",
+    "Undo": "Ctrl+Z",
+    "Clear": "Escape",
+    "Delete last character": "Backspace",
+    "Basic mode": "Ctrl+Alt+B",
+    "Advanced mode": "Ctrl+Alt+A",
+    "Financial mode": "Ctrl+Alt+F",
+    "Programming mode": "Ctrl+Alt+P",
+    "Keyboard mode": "Ctrl+Alt+K",
+    "Converter mode": "Ctrl+Alt+C",
+    "Show keyboard shortcuts": "Ctrl+Question"
+  },
+  "system-monitor": {
+    "_version": "48.0",
+    "_source": "In-app shortcut dialog + GNOME help pages",
+    "Search": "Ctrl+F",
+    "Quit": "Ctrl+Q",
+    "Show keyboard shortcuts": "Ctrl+Question",
+    "_skills": {
+      "Find a process": ["Open search", "Type the process name"]
+    }
+  },
+  "showtime": {
+    "_version": "50.0",
+    "_source": "In-app shortcut dialog (Ctrl+?)",
+    "Play/Pause": "Space",
+    "Full screen": "F",
+    "Seek forward": "Right",
+    "Seek backward": "Left",
+    "Seek forward (large)": "Ctrl+Right",
+    "Seek backward (large)": "Ctrl+Left",
+    "Volume up": "Up",
+    "Volume down": "Down",
+    "Mute": "M",
+    "Open file": "Ctrl+O",
     "Show keyboard shortcuts": "Ctrl+Question"
   }
 }
