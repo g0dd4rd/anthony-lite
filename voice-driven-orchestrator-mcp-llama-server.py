@@ -1665,6 +1665,8 @@ def retrieve_relevant_namespaces(user_input: str, top_k: int = 2) -> tuple:
         'copy', 'paste', 'cut', 'print', 'share', 'save', 'run', 'start',
         'stop', 'play', 'pause', 'resume', 'check', 'set', 'get', 'look',
         'view', 'edit', 'type', 'click', 'select', 'switch', 'turn',
+        'camera', 'clock', 'contacts', 'maps', 'weather', 'calendar',
+        'music', 'videos', 'photos', 'image', 'terminal', 'console',
     }
     import string
     words = [w.strip(string.punctuation) for w in user_input_lower.split()]
@@ -2468,6 +2470,7 @@ def run_agent():
 
                 MAX_CHAIN_STEPS = 5
                 last_tool_result = None
+                chain_abort = False
 
                 for chain_step in range(MAX_CHAIN_STEPS):
                     if chain_step > 0:
@@ -2484,15 +2487,32 @@ def run_agent():
                     log_and_print('\n'.join(debug_lines), level='debug', console=DEBUG)
 
                     logger.info(f"[LLM_REQ] chain_step={chain_step} tools={[t['function']['name'] for t in filtered_tools]} msg_count={len(command_messages)}")
+                    max_tokens = 300
                     llm_start_time = time.time()
                     response = call_llama_server(
                         messages=command_messages,
                         tools=filtered_tools,
                         temperature=0.0,
-                        max_tokens=300
+                        max_tokens=max_tokens
                     )
                     llm_elapsed = time.time() - llm_start_time
-                    log_and_print(f"[TIMING] ⏱️  LLM inference took: {llm_elapsed:.2f}s")
+
+                    # Detect truncation: if LLM hit max_tokens, retry with more
+                    eval_count = response.get('eval_count', 0)
+                    if eval_count >= max_tokens and response['message'].get('tool_calls'):
+                        log_and_print(f"[LLM] Output truncated at {max_tokens} tokens, retrying with 600...", level='warning')
+                        response = call_llama_server(
+                            messages=command_messages,
+                            tools=filtered_tools,
+                            temperature=0.0,
+                            max_tokens=600
+                        )
+                        retry_elapsed = time.time() - llm_start_time - llm_elapsed
+                        llm_elapsed = time.time() - llm_start_time
+                        log_and_print(f"[TIMING] ⏱️  LLM inference took: {llm_elapsed:.2f}s (incl. truncation retry: {retry_elapsed:.2f}s)")
+                    else:
+                        log_and_print(f"[TIMING] ⏱️  LLM inference took: {llm_elapsed:.2f}s")
+
                     logger.info(f"[LLM_RESP] inference={llm_elapsed:.2f}s tokens={response.get('eval_count', 'N/A')} has_tool_calls={bool(response['message'].get('tool_calls'))}")
 
                     debug_lines = [f"[DEBUG] Gemma eval_count: {response.get('eval_count', 'N/A')} tokens"]
@@ -2535,7 +2555,13 @@ def run_agent():
 
                         # Parse JSON string to dict if needed (llama-server returns string, Ollama returns dict)
                         if isinstance(arguments, str):
-                            arguments = json.loads(arguments)
+                            try:
+                                arguments = json.loads(arguments)
+                            except json.JSONDecodeError:
+                                log_and_print(f"[COMMAND] ⚠️  LLM returned malformed JSON for {tool_name}: {arguments[:100]}...", level='warning')
+                                speak("Something went wrong processing that command. Please try again.")
+                                chain_abort = True
+                                break
 
                         result = None
 
@@ -2613,6 +2639,9 @@ def run_agent():
                             "tool_call_id": tool_call_id,
                             "content": str(result)
                         })
+
+                    if chain_abort:
+                        break
 
                 else:
                     # Exhausted MAX_CHAIN_STEPS — speak whatever we have
