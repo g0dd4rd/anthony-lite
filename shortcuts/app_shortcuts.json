@@ -174,7 +174,7 @@
     "Show keyboard shortcuts": "Ctrl+Question"
   },
   "ptyxis": {
-    "_version": "48.0",
+    "_version": "50.1",
     "_source": "gsettings org.gnome.Ptyxis.Shortcuts + BDD feature files",
     "New tab": "Ctrl+Shift+T",
     "Close tab": "Ctrl+Shift+W",
@@ -199,7 +199,7 @@
     }
   },
   "calculator": {
-    "_version": "48.0",
+    "_version": "50.0",
     "_source": "In-app shortcut dialog (Ctrl+?) + GNOME help pages",
     "Copy": "Ctrl+C",
     "Paste": "Ctrl+V",
@@ -215,7 +215,7 @@
     "Show keyboard shortcuts": "Ctrl+Question"
   },
   "system-monitor": {
-    "_version": "48.0",
+    "_version": "50.0",
     "_source": "In-app shortcut dialog + GNOME help pages",
     "Search": "Ctrl+F",
     "Quit": "Ctrl+Q",
@@ -238,5 +238,109 @@
     "Mute": "M",
     "Open file": "Ctrl+O",
     "Show keyboard shortcuts": "Ctrl+Question"
+  },
+  "google-chrome": {
+    "_version": "148.0",
+    "_source": "https://support.google.com/chrome/answer/157179",
+    "Focus address bar": "Ctrl+L",
+    "Focus search bar": "Ctrl+K",
+    "New tab": "Ctrl+T",
+    "Close tab": "Ctrl+W",
+    "Reopen closed tab": "Ctrl+Shift+T",
+    "Next tab": "Ctrl+Page_Down",
+    "Previous tab": "Ctrl+Page_Up",
+    "Go to tab 1-8": "Ctrl+1 to Ctrl+8",
+    "Go to last tab": "Ctrl+9",
+    "New window": "Ctrl+N",
+    "Incognito window": "Ctrl+Shift+N",
+    "Close window": "Ctrl+Shift+W",
+    "Quit": "Ctrl+Q",
+    "Find in page": "Ctrl+F",
+    "Find next": "Ctrl+G",
+    "Find previous": "Ctrl+Shift+G",
+    "Refresh": "Ctrl+R",
+    "Refresh bypass cache": "Ctrl+Shift+R",
+    "Stop loading": "Escape",
+    "Back": "Alt+Left",
+    "Forward": "Alt+Right",
+    "Bookmark page": "Ctrl+D",
+    "Bookmarks manager": "Ctrl+Shift+O",
+    "Show bookmarks bar": "Ctrl+Shift+B",
+    "History": "Ctrl+H",
+    "Downloads": "Ctrl+J",
+    "Extensions": "Ctrl+Shift+E",
+    "Print": "Ctrl+P",
+    "Save page": "Ctrl+S",
+    "Full screen": "F11",
+    "Zoom in": "Ctrl+Plus",
+    "Zoom out": "Ctrl+Minus",
+    "Reset zoom": "Ctrl+0",
+    "Developer tools": "F12",
+    "Task manager": "Shift+Escape",
+    "Settings": "Alt+E",
+    "Select all": "Ctrl+A",
+    "Copy": "Ctrl+C",
+    "Cut": "Ctrl+X",
+    "Paste": "Ctrl+V",
+    "Paste as plain text": "Ctrl+Shift+V",
+    "Undo": "Ctrl+Z",
+    "Redo": "Ctrl+Shift+Z",
+    "_skills": {
+      "Search the web": ["Focus the address bar", "Type the search query", "Press Enter"],
+      "Browse to a URL": ["Focus the address bar", "Type the URL", "Press Enter"],
+      "Open new tab and search": ["Open a new tab", "Type the search query", "Press Enter"],
+      "Find text on page": ["Open find in page", "Type the search text"]
+    }
+  },
+  "decibels": {
+    "_version": "49.6.1",
+    "_source": "In-app shortcut dialog (Ctrl+?)",
+    "Play/Pause": "Space",
+    "Seek forward": "Right",
+    "Seek backward": "Left",
+    "Seek forward (large)": "Shift+Right",
+    "Seek backward (large)": "Shift+Left",
+    "Volume up": "Up",
+    "Volume down": "Down",
+    "Open file": "Ctrl+O",
+    "Show keyboard shortcuts": "Ctrl+Question"
+  },
+  "clocks": {
+    "_version": "50.0",
+    "_source": "In-app shortcut dialog (Ctrl+?)",
+    "New item": "Ctrl+N",
+    "Show keyboard shortcuts": "Ctrl+Question",
+    "Quit": "Ctrl+Q"
+  },
+  "boxes": {
+    "_version": "50.0",
+    "_source": "In-app shortcut dialog (Ctrl+?)",
+    "New virtual machine": "Ctrl+N",
+    "Search": "Ctrl+F",
+    "Full screen": "F11",
+    "Send Ctrl+Alt+Delete": "Ctrl+Alt+Delete",
+    "Release cursor": "Ctrl+Alt",
+    "Show keyboard shortcuts": "Ctrl+Question",
+    "Quit": "Ctrl+Q"
+  },
+  "baobab": {
+    "_version": "50.0",
+    "_source": "In-app shortcut dialog (Ctrl+?)",
+    "Scan folder": "Ctrl+O",
+    "Scan home": "Ctrl+Shift+O",
+    "Reload": "Ctrl+R",
+    "Show keyboard shortcuts": "Ctrl+Question",
+    "Quit": "Ctrl+Q"
+  },
+  "simple-scan": {
+    "_version": "49.1",
+    "_source": "In-app shortcut dialog (Ctrl+?)",
+    "Scan": "Ctrl+G",
+    "Save": "Ctrl+S",
+    "Email": "Ctrl+E",
+    "Print": "Ctrl+P",
+    "Preferences": "Ctrl+Comma",
+    "Show keyboard shortcuts": "Ctrl+Question",
+    "Quit": "Ctrl+Q"
   }
 }

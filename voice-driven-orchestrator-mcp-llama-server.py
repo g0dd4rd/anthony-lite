@@ -463,6 +463,34 @@ app_name_map = {}  # Global app name mapping: term → executable
 app_friendly_name = {}  # Global executable → friendly name
 app_names_only = set()  # Names + GenericNames only (no keywords), for routing
 
+# Friendly name → JSON key in app_shortcuts.json (used for shortcut lookup AND routing)
+APP_SHORTCUT_ALIASES = {
+    "text editor": "text-editor",
+    "gnome text editor": "text-editor",
+    "gnome-text-editor": "text-editor",
+    "files": "nautilus",
+    "file manager": "nautilus",
+    "image viewer": "loupe",
+    "document viewer": "papers",
+    "pdf viewer": "papers",
+    "terminal": "ptyxis",
+    "videos": "showtime",
+    "video player": "showtime",
+    "gnome videos": "showtime",
+    "system monitor": "system-monitor",
+    "gnome system monitor": "system-monitor",
+    "chrome": "google-chrome",
+    "google chrome": "google-chrome",
+    "audio player": "decibels",
+    "music player": "decibels",
+    "disk usage": "baobab",
+    "disk usage analyzer": "baobab",
+    "disk analyzer": "baobab",
+    "scanner": "simple-scan",
+    "document scanner": "simple-scan",
+    "virtual machines": "boxes",
+}
+
 # Keyboard shortcuts that may trigger save dialogs (close app/window/tab)
 # Check for dialogs only on these to avoid performance penalty on other shortcuts
 DIALOG_CHECK_SHORTCUTS = {
@@ -621,6 +649,9 @@ def build_app_index():
         for keyword in app['keywords']:
             if keyword:
                 app_name_map[keyword.lower()] = exec_name
+
+    for alias in APP_SHORTCUT_ALIASES:
+        app_names_only.add(alias)
 
     log_and_print(f"[SYSTEM] ✓ Indexed {len(app_name_map)} app name mappings ({gnome_count} org.gnome with priority)")
 
@@ -1653,24 +1684,7 @@ def get_app_shortcuts(app_name: str) -> str:
     try:
         with open(json_path) as f:
             curated = _json.load(f)
-        # Fuzzy match: "text editor" → "text-editor", "files" → "nautilus"
-        alias_map = {
-            "text editor": "text-editor",
-            "gnome text editor": "text-editor",
-            "gnome-text-editor": "text-editor",
-            "files": "nautilus",
-            "file manager": "nautilus",
-            "image viewer": "loupe",
-            "document viewer": "papers",
-            "pdf viewer": "papers",
-            "terminal": "ptyxis",
-            "videos": "showtime",
-            "video player": "showtime",
-            "gnome videos": "showtime",
-            "system monitor": "system-monitor",
-            "gnome system monitor": "system-monitor",
-        }
-        lookup_key = alias_map.get(app_lower, app_lower)
+        lookup_key = APP_SHORTCUT_ALIASES.get(app_lower, app_lower)
         if lookup_key in curated:
             shortcuts.update(curated[lookup_key])
     except Exception:
@@ -1815,8 +1829,9 @@ def retrieve_relevant_namespaces(user_input: str, top_k: int = 2) -> tuple:
         'copy', 'paste', 'cut', 'print', 'share', 'save', 'run', 'start',
         'stop', 'play', 'pause', 'resume', 'check', 'set', 'get', 'look',
         'view', 'edit', 'type', 'click', 'select', 'switch', 'turn',
-        'camera', 'clock', 'contacts', 'maps', 'weather', 'calendar',
+        'camera', 'clock', 'clocks', 'contacts', 'maps', 'weather', 'calendar',
         'music', 'videos', 'photos', 'image', 'terminal', 'console',
+        'boxes', 'scanner',
     }
     import string
     words = [w.strip(string.punctuation) for w in user_input_lower.split()]
@@ -2576,7 +2591,23 @@ def run_agent():
                     try:
                         focus_result = window_control("focus", detected_app)
                         if "No window found" in focus_result:
-                            log_and_print(f"[ROUTING] App '{detected_app}' not running, skipping auto-focus", level='warning')
+                            log_and_print(f"[ROUTING] App '{detected_app}' not running, launching it")
+                            try:
+                                launch_result = mcp_client.call_tool("gnome_search", {"query": detected_app})
+                                log_and_print(f"[ROUTING] Launched: {launch_result}")
+                                for _attempt in range(10):
+                                    time.sleep(0.5)
+                                    focus_result = window_control("focus", detected_app)
+                                    if "No window found" not in focus_result:
+                                        break
+                                if "No window found" not in focus_result:
+                                    auto_focused = True
+                                    log_and_print(f"[ROUTING] Auto-focused after launch ({(_attempt + 1) * 0.5:.1f}s): {focus_result}")
+                                    command_messages[-1]["content"] += f"\n[{detected_app} has been opened and is focused. Do NOT open or search for it.]"
+                                else:
+                                    log_and_print(f"[ROUTING] App '{detected_app}' didn't appear within 5s", level='warning')
+                            except Exception as e:
+                                log_and_print(f"[ROUTING] Failed to launch '{detected_app}': {e}")
                         else:
                             auto_focused = True
                             log_and_print(f"[ROUTING] Auto-focused: {focus_result}")
