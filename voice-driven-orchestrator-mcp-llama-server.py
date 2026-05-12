@@ -1469,6 +1469,116 @@ def get_battery_status() -> str:
         return "Could not read battery status."
 
 
+def set_brightness(target: str, level: str) -> str:
+    """Set screen or keyboard backlight brightness."""
+    try:
+        if target == "keyboard":
+            device_flag = ["--device", "tpacpi::kbd_backlight"]
+        else:
+            device_flag = []
+
+        if level in ("up", "increase"):
+            cmd = ["brightnessctl", *device_flag, "set", "+10%"]
+        elif level in ("down", "decrease"):
+            cmd = ["brightnessctl", *device_flag, "set", "10%-"]
+        elif level.endswith("%"):
+            cmd = ["brightnessctl", *device_flag, "set", level]
+        elif level == "max":
+            cmd = ["brightnessctl", *device_flag, "set", "100%"]
+        elif level in ("min", "off") and target == "keyboard":
+            cmd = ["brightnessctl", *device_flag, "set", "0"]
+        elif level == "min":
+            cmd = ["brightnessctl", *device_flag, "set", "5%"]
+        else:
+            cmd = ["brightnessctl", *device_flag, "set", level]
+
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        for line in result.stdout.splitlines():
+            if "Current brightness" in line:
+                import re
+                pct_match = re.search(r'\((\d+%)\)', line)
+                if pct_match:
+                    label = "Keyboard backlight" if target == "keyboard" else "Brightness"
+                    return f"{label} set to {pct_match.group(1)}."
+                return line.strip()
+        return f"{'Keyboard backlight' if target == 'keyboard' else 'Brightness'} set to {level}."
+    except FileNotFoundError:
+        return "brightnessctl is not installed."
+    except Exception as e:
+        return f"Error setting brightness: {e}"
+
+
+def get_power_profile() -> str:
+    """Get the current power profile."""
+    try:
+        result = subprocess.run(
+            ["gdbus", "call", "--system",
+             "--dest", "net.hadess.PowerProfiles",
+             "--object-path", "/net/hadess/PowerProfiles",
+             "--method", "org.freedesktop.DBus.Properties.Get",
+             "net.hadess.PowerProfiles", "ActiveProfile"],
+            capture_output=True, text=True, check=True
+        )
+        profile = result.stdout.strip().strip("(<'>),")
+        return f"Power mode is {profile}."
+    except Exception as e:
+        return f"Error reading power profile: {e}"
+
+
+def set_power_profile(profile: str) -> str:
+    """Set power profile: performance, balanced, or power-saver."""
+    profile_map = {
+        "performance": "performance",
+        "balanced": "balanced",
+        "power saver": "power-saver",
+        "power-saver": "power-saver",
+        "powersaver": "power-saver",
+    }
+    profile_name = profile_map.get(profile.lower())
+    if not profile_name:
+        return f"Unknown profile: {profile}. Options: performance, balanced, power-saver."
+    try:
+        subprocess.run(
+            ["gdbus", "call", "--system",
+             "--dest", "net.hadess.PowerProfiles",
+             "--object-path", "/net/hadess/PowerProfiles",
+             "--method", "org.freedesktop.DBus.Properties.Set",
+             "net.hadess.PowerProfiles", "ActiveProfile",
+             f"<'{profile_name}'>"],
+            capture_output=True, text=True, check=True
+        )
+        return f"Power mode set to {profile_name}."
+    except Exception as e:
+        return f"Error setting power profile: {e}"
+
+
+def lock_screen() -> str:
+    """Lock the screen."""
+    try:
+        subprocess.run(["loginctl", "lock-session"], check=True)
+        return "Screen locked."
+    except Exception as e:
+        return f"Error locking screen: {e}"
+
+
+def power_action(action: str) -> str:
+    """Execute a power action: suspend, restart, shutdown, or logout."""
+    if action == "suspend":
+        subprocess.run(["systemctl", "suspend"], check=False)
+        return "Suspending."
+    elif action == "restart":
+        subprocess.run(["systemctl", "reboot"], check=False)
+        return "Restarting."
+    elif action == "shutdown":
+        subprocess.run(["systemctl", "poweroff"], check=False)
+        return "Shutting down."
+    elif action == "logout":
+        subprocess.run(["gnome-session-quit", "--logout", "--no-prompt"], check=False)
+        return "Logging out."
+    else:
+        return f"Unknown power action: {action}"
+
+
 def get_datetime() -> str:
     """Return the current date, time, and day of week."""
     from datetime import datetime
@@ -2611,6 +2721,85 @@ def run_agent():
                                 window_handled = True
                             break
                 if window_handled:
+                    continue
+
+                # Short-circuit: brightness control
+                if 'brightness' in user_input_lower or 'backlight' in user_input_lower:
+                    target = "keyboard" if any(w in user_input_lower for w in ('keyboard', 'kbd', 'keys')) else "screen"
+                    level = None
+                    if any(w in user_input_lower for w in ('up', 'increase', 'brighter', 'raise')):
+                        level = "up"
+                    elif any(w in user_input_lower for w in ('down', 'decrease', 'dimmer', 'lower', 'dim')):
+                        level = "down"
+                    elif 'max' in user_input_lower or 'full' in user_input_lower:
+                        level = "max"
+                    elif 'min' in user_input_lower or ('off' in user_input_lower and target == "keyboard"):
+                        level = "min"
+                    else:
+                        import re
+                        pct_match = re.search(r'(\d+)\s*%', user_input_lower)
+                        if pct_match:
+                            level = f"{pct_match.group(1)}%"
+                    if level:
+                        result = set_brightness(target, level)
+                        speak(result)
+                        log_and_print(f"[ROUTING] Short-circuit: {target} brightness {level}, skipping LLM")
+                        log_and_print(f"[TIMING] ⏱️  Response time: {time.time() - retrieval_start_time:.2f}s (no LLM)")
+                        continue
+
+                # Short-circuit: power profile
+                if 'power mode' in user_input_lower or 'power profile' in user_input_lower or 'power saver' in user_input_lower:
+                    if any(w in user_input_lower for w in ('what', 'current', 'which', 'get', 'check')):
+                        result = get_power_profile()
+                    elif 'performance' in user_input_lower:
+                        result = set_power_profile("performance")
+                    elif 'balanced' in user_input_lower:
+                        result = set_power_profile("balanced")
+                    elif any(w in user_input_lower for w in ('power saver', 'power-saver', 'saving')):
+                        result = set_power_profile("power-saver")
+                    else:
+                        result = get_power_profile()
+                    speak(result)
+                    log_and_print(f"[ROUTING] Short-circuit: power profile, skipping LLM")
+                    log_and_print(f"[TIMING] ⏱️  Response time: {time.time() - retrieval_start_time:.2f}s (no LLM)")
+                    continue
+
+                # Short-circuit: lock screen
+                if any(p in user_input_lower for p in ('lock screen', 'lock the screen', 'lock my screen')):
+                    result = lock_screen()
+                    speak(result)
+                    log_and_print(f"[ROUTING] Short-circuit: lock screen, skipping LLM")
+                    log_and_print(f"[TIMING] ⏱️  Response time: {time.time() - retrieval_start_time:.2f}s (no LLM)")
+                    continue
+
+                # Short-circuit: power actions (with confirmation)
+                _power_actions = {
+                    'suspend': ('suspend', 'sleep', 'hibernate'),
+                    'restart': ('restart', 'reboot'),
+                    'shutdown': ('shut down', 'shutdown', 'power off', 'poweroff', 'turn off the computer'),
+                    'logout': ('log out', 'logout', 'sign out', 'sign off'),
+                }
+                power_matched = None
+                for action_name, phrases in _power_actions.items():
+                    if any(p in user_input_lower for p in phrases):
+                        power_matched = action_name
+                        break
+                if power_matched:
+                    _power_confirmations = {
+                        'suspend': "Are you sure you want to put the computer to sleep?",
+                        'restart': "Are you sure you want to restart the computer?",
+                        'shutdown': "Are you sure you want to shut down the computer?",
+                        'logout': "Are you sure you want to log out of your desktop session?",
+                    }
+                    speak(_power_confirmations[power_matched])
+                    confirmation = listen_and_transcribe()
+                    if confirmation and any(w in confirmation.lower() for w in ('yes', 'yeah', 'yep', 'sure', 'do it', 'confirm', 'go ahead')):
+                        result = power_action(power_matched)
+                        speak(result)
+                    else:
+                        speak("Canceled.")
+                    log_and_print(f"[ROUTING] Short-circuit: power action {power_matched}, skipping LLM")
+                    log_and_print(f"[TIMING] ⏱️  Response time: {time.time() - retrieval_start_time:.2f}s (no LLM)")
                     continue
 
                 # Build filtered tool schema with only relevant tools
