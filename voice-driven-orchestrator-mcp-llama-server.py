@@ -2594,8 +2594,19 @@ def run_agent():
                                     result = mcp_client.call_tool("open_file", {"path": filename})
 
                                 else:
-                                    # Normal GNOME search for apps/settings
-                                    result = mcp_client.call_tool(tool_name, arguments)
+                                    # Before launching, check if the app is already running
+                                    try:
+                                        win_list = json.loads(mcp_client.call_tool("list_windows", {}))
+                                        match = smart_match_window(query, win_list)
+                                        if match:
+                                            mcp_client.call_tool("focus_window", {"id": match["id"]})
+                                            friendly = get_friendly_app_name(match.get('wmClass', query))
+                                            result = f"{friendly} is already running. Switched to it."
+                                            log_and_print(f"[GNOME_SEARCH] App already running: {friendly}, focused window '{match.get('title', '')}'")
+                                        else:
+                                            result = mcp_client.call_tool(tool_name, arguments)
+                                    except Exception:
+                                        result = mcp_client.call_tool(tool_name, arguments)
                             else:
                                 result = mcp_client.call_tool(tool_name, arguments)
 
