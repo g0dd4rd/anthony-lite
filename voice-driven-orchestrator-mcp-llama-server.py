@@ -784,7 +784,7 @@ def window_control(action: str, window_name: str = "", x: int = 0, y: int = 0,
             })
             if result.startswith("Error"):
                 return result
-            return f"Area screenshot ({width}x{height}) saved to {result.strip()}"
+            return f"Area screenshot saved to Screenshots."
 
         # All other actions need a window
         result = mcp_client.call_tool("list_windows", {})
@@ -899,7 +899,7 @@ def window_control(action: str, window_name: str = "", x: int = 0, y: int = 0,
             })
             if result.startswith("Error"):
                 return result
-            return f"Screenshot of {friendly_name} saved to {result.strip()}"
+            return f"Screenshot of {friendly_name} saved to Screenshots."
 
         # MOVE_RESIZE
         elif action == "move_resize":
@@ -1228,7 +1228,7 @@ def vision_control(action: str, x: int = 0, y: int = 0, path: str = "") -> str:
             result = mcp_client.call_tool("screenshot", {"include_cursor": False, "format": "path"})
             if result.startswith("Error"):
                 return result
-            return f"Full desktop screenshot saved to {result.strip()}"
+            return f"Screenshot saved to Screenshots."
 
         # DESCRIBE
         elif action == "describe":
@@ -2791,6 +2791,24 @@ def run_agent():
                     log_and_print(f"[ROUTING] Short-circuit: screenshot, skipping LLM")
                     log_and_print(f"[TIMING] ⏱️  Response time: {time.time() - retrieval_start_time:.2f}s (no LLM)")
                     continue
+                # App-specific screenshot: "take a screenshot of firefox"
+                if detected_app and 'screenshot' in user_input_lower:
+                    _app_screenshot_prefixes = ('take a screenshot of', 'take screenshot of',
+                                                'screenshot of', 'capture')
+                    app_screenshot = False
+                    for prefix in _app_screenshot_prefixes:
+                        if user_input_lower.startswith(prefix):
+                            remainder = user_input_lower[len(prefix):].strip()
+                            remainder = remainder.removeprefix('the ').strip()
+                            if remainder == detected_app:
+                                result = window_control("screenshot", detected_app)
+                                speak(result)
+                                log_and_print(f"[ROUTING] Short-circuit: screenshot of {detected_app}, skipping LLM")
+                                log_and_print(f"[TIMING] ⏱️  Response time: {time.time() - retrieval_start_time:.2f}s (no LLM)")
+                                app_screenshot = True
+                            break
+                    if app_screenshot:
+                        continue
 
                 # Short-circuit: brightness control
                 if 'brightness' in user_input_lower or 'backlight' in user_input_lower:
