@@ -1415,7 +1415,7 @@ def workspace_control(action: str, index: int = 0) -> str:
                         break
 
                 total = len(workspaces)
-                return f"You have {total} workspace{'s' if total > 1 else ''}. Workspace {active_workspace} is the current workspace."
+                return f"You have {total} workspace{'s' if total > 1 else ''}. You are on workspace {active_workspace + 1}."
 
             except json.JSONDecodeError:
                 return result
@@ -1425,7 +1425,7 @@ def workspace_control(action: str, index: int = 0) -> str:
             result = mcp_client.call_tool("activate_workspace", {"index": index})
             if result.startswith("Error"):
                 return result
-            return f"Switched to workspace {index}"
+            return f"Switched to workspace {index + 1}"
 
         else:
             return f"Unknown workspace action: {action}"
@@ -1757,7 +1757,7 @@ tool_schema_full = [
     {"type": "function", "function": {"name": "vision_control", "description": "Unified vision operations: take full desktop screenshot, describe what's on screen using AI vision, describe/analyze an image file by path, pick RGB color at screen coordinates, get monitor information (position, resolution, scaling). Handles all screen analysis and display queries. For pick_color: user says 'at 100, 100' or 'at 100-100' or 'at coordinates 100 and 100' means x=100, y=100. For describe_file: use search_files FIRST to get the exact path, then call describe_file with the full path from the search result.", "parameters": {"type": "object", "properties": {"action": {"type": "string", "description": "Action: screenshot (full desktop) | describe (AI vision of current screen) | describe_file (analyze image at path) | pick_color | get_monitors"}, "x": {"type": "integer", "description": "X coordinate in pixels for pick_color action. User says '100, 100' or '100-100' means x=100. Must be positive integer >= 1.", "default": 0}, "y": {"type": "integer", "description": "Y coordinate in pixels for pick_color action. User says '100, 100' or '100-100' or 'at 100 and 100' means y=100. Must be positive integer >= 1.", "default": 0}, "path": {"type": "string", "description": "File path for describe_file action. Supports ~ for home directory. Example: '~/Pictures/screenshot.png'", "default": ""}}, "required": ["action"]}}},
 
     # 7. WORKSPACE_CONTROL (facade)
-    {"type": "function", "function": {"name": "workspace_control", "description": "Unified workspace management: list all virtual desktops, switch to specific workspace by index (0-based). Handles all multi-desktop operations. NOTE: Workspace numbering is 0-based: 'workspace 1' = index 0, 'workspace 2' = index 1, etc. User says 'workspace ONE' or 'workspace 1' means index=1 (second workspace).", "parameters": {"type": "object", "properties": {"action": {"type": "string", "description": "Action: list | activate"}, "index": {"type": "integer", "description": "Workspace index (0-based integer). User says 'workspace 1' or 'workspace ONE' = use index 1. User says 'workspace 0' or 'first workspace' = use index 0.", "default": 0}}, "required": ["action"]}}},
+    {"type": "function", "function": {"name": "workspace_control", "description": "Unified workspace management: list all virtual desktops, switch to specific workspace by index (0-based). Users say workspace numbers starting from 1, but the index parameter is 0-based, so subtract 1: 'workspace 1' = index 0, 'workspace 2' = index 1, 'workspace 3' = index 2.", "parameters": {"type": "object", "properties": {"action": {"type": "string", "description": "Action: list | activate"}, "index": {"type": "integer", "description": "Workspace index (0-based). Subtract 1 from the user's number: 'workspace 1' = index 0, 'workspace 2' = index 1.", "default": 0}}, "required": ["action"]}}},
 
     # 8. LIST_INSTALLED_APPLICATIONS (standalone)
     {"type": "function", "function": {"name": "list_installed_applications", "description": "Lists all installed GUI applications available on the Linux system. Use for 'what apps are installed', 'list all applications', 'show me installed programs'.", "parameters": {"type": "object", "properties": {}}}},
