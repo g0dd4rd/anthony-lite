@@ -1794,15 +1794,14 @@ def retrieve_relevant_namespaces(user_input: str, top_k: int = 2) -> tuple:
     Returns (namespaces_list, detected_app_name_or_None)."""
     from sentence_transformers.util import cos_sim
 
-    user_input_lower = user_input.lower()
+    user_input_lower = user_input.lower().rstrip('.!?,;')
 
     # Verb-based routing: force include specific namespaces for certain verbs
     forced_namespaces = []
 
     # Window management verbs → force window namespace
-    # Note: Removed 'screenshot' - it's ambiguous (could be window screenshot, desktop screenshot, or filename)
     window_verbs = ['close', 'quit', 'exit', 'kill', 'minimize', 'maximize', 'restore',
-                    'focus', 'switch to', 'move', 'resize']
+                    'focus', 'switch to', 'move', 'resize', 'screenshot']
     if any(verb in user_input_lower for verb in window_verbs):
         if 'window' not in forced_namespaces:
             forced_namespaces.append('window')
@@ -2532,7 +2531,7 @@ def run_agent():
             # Start timing from when user input is captured
             response_start_time = time.time()
 
-            user_input_lower = user_input.lower()
+            user_input_lower = user_input.lower().rstrip('.!?,;')
 
             # Check for explicit mode switching (these don't need timing - just mode control)
             if 'switch to command mode' in user_input_lower or 'command mode' in user_input_lower:
@@ -2726,11 +2725,11 @@ def run_agent():
                 # Short-circuit: audio controls
                 audio_handled = False
                 # Mute / unmute
-                if user_input_lower.rstrip('.') in ('mute', 'mute the sound', 'mute sound', 'mute audio'):
+                if user_input_lower in ('mute', 'mute the sound', 'mute sound', 'mute audio'):
                     result = audio_control("mute")
                     speak("Muted.")
                     audio_handled = True
-                elif any(user_input_lower.rstrip('.') == p for p in ('unmute', 'unmute the sound', 'unmute sound', 'unmute audio')):
+                elif any(user_input_lower == p for p in ('unmute', 'unmute the sound', 'unmute sound', 'unmute audio')):
                     result = audio_control("unmute")
                     speak("Unmuted.")
                     audio_handled = True
@@ -2753,32 +2752,43 @@ def run_agent():
                         speak(f"Volume set to {level}%.")
                         audio_handled = True
                 # Media controls
-                elif user_input_lower.rstrip('.') in ('play', 'play music', 'resume', 'resume playback'):
+                elif user_input_lower in ('play', 'play music', 'resume', 'resume playback'):
                     result = audio_control("play")
                     speak("Playing.")
                     audio_handled = True
-                elif user_input_lower.rstrip('.') in ('pause', 'pause music', 'pause playback'):
+                elif user_input_lower in ('pause', 'pause music', 'pause playback'):
                     result = audio_control("pause")
                     speak("Paused.")
                     audio_handled = True
-                elif user_input_lower.rstrip('.') in ('play pause', 'play/pause', 'toggle playback'):
+                elif user_input_lower in ('play pause', 'play/pause', 'toggle playback'):
                     result = audio_control("play_pause")
                     speak("Toggled playback.")
                     audio_handled = True
-                elif user_input_lower.rstrip('.') in ('stop', 'stop music', 'stop playback', 'stop playing'):
+                elif user_input_lower in ('stop', 'stop music', 'stop playback', 'stop playing'):
                     result = audio_control("stop")
                     speak("Stopped.")
                     audio_handled = True
-                elif user_input_lower.rstrip('.') in ('next', 'next song', 'next track', 'skip'):
+                elif user_input_lower in ('next', 'next song', 'next track', 'skip'):
                     result = audio_control("next")
                     speak("Next track.")
                     audio_handled = True
-                elif user_input_lower.rstrip('.') in ('previous', 'previous song', 'previous track', 'go back'):
+                elif user_input_lower in ('previous', 'previous song', 'previous track', 'go back'):
                     result = audio_control("previous")
                     speak("Previous track.")
                     audio_handled = True
                 if audio_handled:
                     log_and_print(f"[ROUTING] Short-circuit: audio control, skipping LLM")
+                    log_and_print(f"[TIMING] ⏱️  Response time: {time.time() - retrieval_start_time:.2f}s (no LLM)")
+                    continue
+
+                # Short-circuit: screenshot
+                _screenshot_phrases = ('take a screenshot', 'take screenshot', 'capture screen',
+                                       'screenshot', 'screen capture', 'grab the screen',
+                                       'capture the screen')
+                if any(user_input_lower == p for p in _screenshot_phrases):
+                    result = vision_control("screenshot")
+                    speak(result)
+                    log_and_print(f"[ROUTING] Short-circuit: screenshot, skipping LLM")
                     log_and_print(f"[TIMING] ⏱️  Response time: {time.time() - retrieval_start_time:.2f}s (no LLM)")
                     continue
 
