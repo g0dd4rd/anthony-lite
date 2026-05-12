@@ -1753,40 +1753,8 @@ direct_mcp_tools = [
 # NAMESPACE ORGANIZATION + RAG
 # ========================================
 
-namespaces = {
-    "search": {
-        "description": "Opening and launching: applications (firefox, text editor, calculator, terminal), files and documents (image.png, document.pdf, report.txt, presentation.pptx), websites (amazon.com, github.com), system settings (wifi, bluetooth). Use for any 'open', 'launch', 'start', 'find' command. Examples: open firefox, open report.pdf, open image.png, launch calculator, go to amazon.com, find settings.",
-        "tools": ["gnome_search"]
-    },
-    "window": {
-        "description": "Managing already running application windows: close, minimize, maximize, restore, focus, move, resize windows. List currently running windows. Capture window images or screen regions. NOT for launching/opening new apps or files.",
-        "tools": ["window_control"]
-    },
-    "input": {
-        "description": "Keyboard input, typing text, pressing keys, key combinations, shortcuts, mouse clicks, double clicks, dragging, scrolling pages up and down. Look up app-specific keyboard shortcuts before performing in-app actions.",
-        "tools": ["input_control", "get_app_shortcuts"]
-    },
-    "audio": {
-        "description": "Sound volume control, mute, unmute, audio levels. Media playback control - play, pause, stop, next track, previous track, music control, audio player control",
-        "tools": ["audio_control"]
-    },
-    "settings": {
-        "description": "System settings - dark mode, light mode, night light, notifications, do not disturb, WiFi, Bluetooth, wallpaper, background image, quick settings toggles",
-        "tools": ["system_settings"]
-    },
-    "vision": {
-        "description": "Screen analysis and display tools: capture full desktop image, describe current screen content with AI, describe or analyze an image file by path (e.g., describe screenshot.png, what's in this picture), pick pixel colors at coordinates, get monitor information (resolution, scaling, position)",
-        "tools": ["vision_control", "search_files"]
-    },
-    "workspace": {
-        "description": "Virtual desktops, workspace switching (switch to workspace 1, go to workspace 2, activate workspace), multi-desktop management, listing workspaces",
-        "tools": ["workspace_control"]
-    },
-    "system": {
-        "description": "System tasks: list installed applications (show apps, what apps are installed), send desktop notifications (notify me, remind me, alert me in X minutes), clean up screenshots (delete screenshots, remove screenshots, cleanup temp files), enable or disable automation, get current date and time (what time is it, what's today's date, what day is it)",
-        "tools": ["list_installed_applications", "send_notification", "cleanup_screenshots", "set_enabled", "get_datetime"]
-    }
-}
+from config.namespaces import NAMESPACES
+namespaces = NAMESPACES
 
 # Load embedding model
 log_and_print("[SYSTEM] Loading embedding model for tool retrieval...")
@@ -1893,49 +1861,11 @@ def build_filtered_tool_schema(relevant_namespaces: list) -> list:
     return filtered_schema
 
 # ========================================
-# CONSOLIDATED TOOL SCHEMA (10 tools total)
+# CONSOLIDATED TOOL SCHEMA (13 tools total)
 # ========================================
 
-tool_schema_full = [
-    # 1. SEARCH (direct MCP)
-    {"type": "function", "function": {"name": "gnome_search", "description": "Find and open apps, files, settings, or websites. For WEBSITES (domains/URLs): append ' website' to query (e.g., 'amazon.com website', 'github.com website'). For FILES (documents, images, etc.): append ' file' to query (e.g., 'Screenshot-1.png file', 'document.pdf file'). For APPS and SETTINGS: use query as-is (e.g., 'firefox', 'text editor', 'wifi settings'). The markers (' website' or ' file') tell the system how to handle the query.", "parameters": {"type": "object", "properties": {"query": {"type": "string", "description": "App name, file name+' file', setting, or domain+' website'. Examples: 'firefox', 'text editor', 'Screenshot-1.png file', 'document.pdf file', 'amazon.com website', 'github.com website', 'wifi'"}}, "required": ["query"]}}},
-
-    # 2. SEARCH_FILES (direct MCP)
-    {"type": "function", "function": {"name": "search_files", "description": "Search for files by name using GNOME file indexing. Returns a JSON list of full absolute file paths matching the query. Use this to find a file's exact path before acting on it (e.g., before describing an image). Does NOT open files.", "parameters": {"type": "object", "properties": {"query": {"type": "string", "description": "Filename or keywords to search for. Example: 'screenshot.png', 'report'"}}, "required": ["query"]}}},
-
-    # 3. WINDOW_CONTROL (facade)
-    {"type": "function", "function": {"name": "window_control", "description": "Unified window management: list windows, focus/close/minimize/maximize/restore windows, take window screenshots or area screenshots, move and resize windows. Matches windows by application name (e.g., 'text editor', 'firefox', 'nautilus'). Empty window_name = current window. For move_resize: left half of 1920x1080 screen = x:0, y:0, width:960, height:1080. Right half = x:960, y:0, width:960, height:1080.", "parameters": {"type": "object", "properties": {"action": {"type": "string", "description": "Action to perform: list | focus | close | minimize | maximize | restore | screenshot | screenshot_area | move_resize"}, "window_name": {"type": "string", "description": "Application name (e.g., 'text editor'). Leave empty for current window.", "default": ""}, "x": {"type": "integer", "description": "X position in pixels for move_resize or screenshot_area. Must be integer, NOT percentage.", "default": 0}, "y": {"type": "integer", "description": "Y position in pixels for move_resize or screenshot_area. Must be integer, NOT percentage.", "default": 0}, "width": {"type": "integer", "description": "Width in pixels for move_resize or screenshot_area. Must be integer, NOT percentage. For left/right half: use 960 pixels on 1920 wide screen.", "default": 800}, "height": {"type": "integer", "description": "Height in pixels for move_resize or screenshot_area. Must be integer, NOT percentage. For full height: use 1080 pixels on 1080 tall screen.", "default": 600}, "include_frame": {"type": "boolean", "description": "Include window borders in screenshot", "default": True}}, "required": ["action"]}}},
-
-    # 3. INPUT_CONTROL (facade)
-    {"type": "function", "function": {"name": "input_control", "description": "Unified input control: type text, press key combos, press single keys, mouse click/double-click, drag and drop, scroll. Use get_app_shortcuts to look up the correct shortcut before pressing keys.", "parameters": {"type": "object", "properties": {"action": {"type": "string", "description": "Action: type | key_combo | key_press | click | double_click | drag | scroll"}, "text": {"type": "string", "description": "Text to type (for 'type' action)", "default": ""}, "keys": {"type": "string", "description": "Key combo like 'Ctrl+c' or single key like 'Enter'", "default": ""}, "x": {"type": "integer", "description": "X coordinate for click or drag start", "default": 0}, "y": {"type": "integer", "description": "Y coordinate for click or drag start", "default": 0}, "to_x": {"type": "integer", "description": "Drag end X coordinate", "default": 0}, "to_y": {"type": "integer", "description": "Drag end Y coordinate", "default": 0}, "from_position": {"type": "string", "description": "Natural language start position for drag: 'left', 'right', 'center', 'top left', etc.", "default": "center"}, "to_position": {"type": "string", "description": "Natural language end position for drag: 'left', 'right', 'center', 'bottom right', etc.", "default": "center"}, "direction": {"type": "string", "description": "Scroll direction: 'up' or 'down'", "default": "down"}, "amount": {"type": "integer", "description": "Scroll amount (number of times)", "default": 1}, "button": {"type": "integer", "description": "Mouse button: 1=left, 2=middle, 3=right", "default": 1}}, "required": ["action"]}}},
-
-    # 4. GET_APP_SHORTCUTS (standalone)
-    {"type": "function", "function": {"name": "get_app_shortcuts", "description": "Look up keyboard shortcuts for a specific application. Call this before using input_control key_combo/key_press to find the correct shortcut for an action. Returns a list of available shortcuts.", "parameters": {"type": "object", "properties": {"app_name": {"type": "string", "description": "Application name (e.g., 'firefox', 'text editor', 'nautilus', 'terminal', 'gnome' for desktop-wide shortcuts)"}}, "required": ["app_name"]}}},
-
-    # 4. AUDIO_CONTROL (facade)
-    {"type": "function", "function": {"name": "audio_control", "description": "Unified audio control: volume (set/increase/decrease), mute, unmute, media playback (play, pause, play_pause toggle, next, previous, stop). Handles all sound and media controls.", "parameters": {"type": "object", "properties": {"action": {"type": "string", "description": "Action: volume | mute | unmute | play | pause | play_pause | next | previous | stop"}, "level": {"type": "integer", "description": "Volume level: 0-100 absolute, or +/- for relative change", "default": 0}, "relative": {"type": "boolean", "description": "True for relative volume change (+/-), false for absolute", "default": False}}, "required": ["action"]}}},
-
-    # 5. SYSTEM_SETTINGS (facade)
-    {"type": "function", "function": {"name": "system_settings", "description": "Unified system settings: toggle dark mode, night light, do not disturb, WiFi, Bluetooth, set wallpaper. Handles all quick settings and appearance controls. For wallpaper: can use color names (red, blue, green), wallpaper names (fedora, adwaita), or file paths.", "parameters": {"type": "object", "properties": {"action": {"type": "string", "description": "Setting: dark_mode | night_light | do_not_disturb | wifi | bluetooth | wallpaper"}, "state": {"type": "string", "description": "For toggles: 'on' or 'off'. For wallpaper: color name (red, blue), wallpaper name (fedora), or path", "default": "toggle"}, "path": {"type": "string", "description": "Image path for wallpaper action (alternative to state parameter)", "default": ""}}, "required": ["action"]}}},
-
-    # 6. VISION_CONTROL (facade)
-    {"type": "function", "function": {"name": "vision_control", "description": "Unified vision operations: take full desktop screenshot, describe what's on screen using AI vision, describe/analyze an image file by path, pick RGB color at screen coordinates, get monitor information (position, resolution, scaling). Handles all screen analysis and display queries. For pick_color: user says 'at 100, 100' or 'at 100-100' or 'at coordinates 100 and 100' means x=100, y=100. For describe_file: use search_files FIRST to get the exact path, then call describe_file with the full path from the search result.", "parameters": {"type": "object", "properties": {"action": {"type": "string", "description": "Action: screenshot (full desktop) | describe (AI vision of current screen) | describe_file (analyze image at path) | pick_color | get_monitors"}, "x": {"type": "integer", "description": "X coordinate in pixels for pick_color action. User says '100, 100' or '100-100' means x=100. Must be positive integer >= 1.", "default": 0}, "y": {"type": "integer", "description": "Y coordinate in pixels for pick_color action. User says '100, 100' or '100-100' or 'at 100 and 100' means y=100. Must be positive integer >= 1.", "default": 0}, "path": {"type": "string", "description": "File path for describe_file action. Supports ~ for home directory. Example: '~/Pictures/screenshot.png'", "default": ""}}, "required": ["action"]}}},
-
-    # 7. WORKSPACE_CONTROL (facade)
-    {"type": "function", "function": {"name": "workspace_control", "description": "Unified workspace management: list all virtual desktops, switch to specific workspace by index (0-based). Users say workspace numbers starting from 1, but the index parameter is 0-based, so subtract 1: 'workspace 1' = index 0, 'workspace 2' = index 1, 'workspace 3' = index 2.", "parameters": {"type": "object", "properties": {"action": {"type": "string", "description": "Action: list | activate"}, "index": {"type": "integer", "description": "Workspace index (0-based). Subtract 1 from the user's number: 'workspace 1' = index 0, 'workspace 2' = index 1.", "default": 0}}, "required": ["action"]}}},
-
-    # 8. LIST_INSTALLED_APPLICATIONS (standalone)
-    {"type": "function", "function": {"name": "list_installed_applications", "description": "Lists all installed GUI applications available on the Linux system. Use for 'what apps are installed', 'list all applications', 'show me installed programs'.", "parameters": {"type": "object", "properties": {}}}},
-
-    # 9. SEND_NOTIFICATION (standalone)
-    {"type": "function", "function": {"name": "send_notification", "description": "Send a desktop notification immediately or after a delay. Use for reminders, timers, alerts. Examples: 'remind me in 5 minutes', 'notify in 1 hour', 'send notification' (immediate).", "parameters": {"type": "object", "properties": {"summary": {"type": "string", "description": "Notification title/headline (required)"}, "body": {"type": "string", "description": "Notification message body (optional)", "default": ""}, "delay": {"type": "string", "description": "Time delay: '5 minutes', '1 hour', '30 seconds'. Empty = immediate.", "default": ""}}, "required": ["summary"]}}},
-
-    # 10. CLEANUP_SCREENSHOTS (standalone)
-    {"type": "function", "function": {"name": "cleanup_screenshots", "description": "Remove all temporary screenshot files to free disk space. Use for maintenance, cleanup tasks.", "parameters": {"type": "object", "properties": {}}}},
-
-    # 11. GET_DATETIME (standalone)
-    {"type": "function", "function": {"name": "get_datetime", "description": "Get the current date, time, and day of week. Use for 'what time is it', 'what's the date', 'what day is it'.", "parameters": {"type": "object", "properties": {}}}},
-]
+from config.tool_schemas import TOOL_SCHEMAS
+tool_schema_full = TOOL_SCHEMAS
 
 # Initially, use all tools (will be filtered dynamically during execution)
 tool_schema = tool_schema_full
@@ -2295,99 +2225,8 @@ def classify_intent_type(user_input: str) -> str:
 
     Returns: 'command' or 'conversation'
     """
-    classifier_prompt = f"""Classify this voice input as either:
-- command: Desktop control actions (open/close apps, window operations, mouse/keyboard, screenshots, colors, volume/audio control, media playback, system settings)
-- conversation: Questions, chat, help requests, explanations, general knowledge
-
-Examples of COMMAND:
-- "open firefox"
-- "close text editor"
-- "describe screen"
-- "maximize window"
-- "scroll down"
-- "drag from left to right"
-- "screenshot the window"
-- "pick color at 500 300"
-- "what color is at position 800 400"
-- "click at 100 200"
-- "switch to workspace 2"
-- "type hello world"
-- "press ctrl c"
-- "enable automation"
-- "disable automation"
-- "turn on automation"
-- "turn off automation"
-- "clean up screenshots"
-- "delete screenshots"
-- "set volume to 50"
-- "increase volume by 10"
-- "decrease volume"
-- "turn volume up"
-- "turn volume down"
-- "mute"
-- "unmute"
-- "mute volume"
-- "unmute volume"
-- "play"
-- "pause"
-- "play track"
-- "pause track"
-- "playtrack"
-- "next track"
-- "previous track"
-- "skip"
-- "skip track"
-- "play music"
-- "pause music"
-- "next song"
-- "previous song"
-- "stop music"
-- "turn on dark mode"
-- "turn off dark mode"
-- "enable dark mode"
-- "disable dark mode"
-- "switch to light mode"
-- "turn on night light"
-- "turn off night light"
-- "enable do not disturb"
-- "disable do not disturb"
-- "turn on wifi"
-- "turn off wifi"
-- "enable bluetooth"
-- "disable bluetooth"
-- "open google.com"
-- "go to github.com"
-- "open https://example.com"
-- "open screenshot.png"
-- "open screenshot in pictures"
-- "open report.pdf"
-- "open ~/Documents/report.pdf"
-- "find all PDFs"
-- "search for screenshots"
-- "where are my tax documents"
-- "list installed applications"
-- "show installed apps"
-- "what apps are installed"
-- "notify me in 5 minutes"
-- "remind me about meeting"
-- "send notification"
-- "alert me in 1 hour"
-- "cleanup screenshots"
-- "remove screenshots"
-- "list workspaces"
-- "switch to workspace 1"
-
-Examples of CONVERSATION:
-- "what is docker"
-- "how do I install nodejs"
-- "tell me about python"
-- "what's the weather"
-- "explain kubernetes"
-- "what does this code do"
-
-Input: "{user_input}"
-
-Reply with ONE word only: command or conversation"""
+    from config.prompts import CLASSIFIER_PROMPT
+    classifier_prompt = CLASSIFIER_PROMPT.format(user_input=user_input)
 
     try:
         response = call_llama_server(
@@ -2424,13 +2263,10 @@ def handle_conversation(user_input: str, conversation_history: list) -> tuple:
     Returns:
         (answer_text, updated_history)
     """
-    conversation_prompt = """You are a helpful AI assistant.
-Answer questions clearly and concisely.
-Keep responses under 3 sentences unless more detail is requested.
-Be friendly and informative."""
+    from config.prompts import CONVERSATION_PROMPT
 
     # Build message history
-    messages = [{'role': 'system', 'content': conversation_prompt}]
+    messages = [{'role': 'system', 'content': CONVERSATION_PROMPT}]
     messages.extend(conversation_history)
     messages.append({'role': 'user', 'content': user_input})
 
@@ -2520,10 +2356,8 @@ def run_agent():
         log_and_print("[SYSTEM] Some features may not work until automation is enabled.", level='warning')
 
     # Command mode system message
-    command_system_msg = {
-        "role": "system",
-        "content": "You are a silent system orchestrator. Your ONLY job is to execute tool calls based on user intent. DO NOT output conversational text. DO NOT confirm actions. DO NOT be polite. If you need to use a tool, output ONLY the tool call. FORGET gedit and USE gnome-text-editor. When a command requires multiple steps, make tool calls one at a time. After receiving tool results, either make another tool call or return a brief spoken summary. Keep summaries under 2 sentences."
-    }
+    from config.prompts import COMMAND_SYSTEM_MSG
+    command_system_msg = {"role": "system", "content": COMMAND_SYSTEM_MSG}
 
     # State variables
     current_mode = 'command'  # Start in command mode (explicit switching only)
