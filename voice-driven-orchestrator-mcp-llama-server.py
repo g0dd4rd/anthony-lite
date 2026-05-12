@@ -2509,20 +2509,29 @@ def run_agent():
                     except Exception as e:
                         log_and_print(f"[ROUTING] Focused-window shortcut lookup failed: {e}")
 
-                # Short-circuit: if routing already handled a pure focus/switch command, skip the LLM
-                # Only triggers when the entire command is just "verb + app name" with nothing else
-                if auto_focused and detected_app:
-                    _focus_verbs = ('switch to', 'focus', 'go to', 'open')
-                    is_focus_only = any(
-                        user_input_lower.startswith(v) and user_input_lower[len(v):].strip().rstrip('.') == detected_app
-                        for v in _focus_verbs
-                    )
-                    if is_focus_only:
-                        friendly = get_friendly_app_name(detected_app)
-                        speak(f"Switched to {friendly}.")
-                        log_and_print(f"[ROUTING] Short-circuit: focus-only command, skipping LLM")
-                        log_and_print(f"[TIMING] ⏱️  Response time: {time.time() - retrieval_start_time:.2f}s (no LLM)")
-                        continue
+                # Short-circuit: if the command is a pure focus/switch, skip the LLM
+                _focus_verbs = ('switch to', 'focus', 'go to', 'open')
+                focus_handled = False
+                for fv in _focus_verbs:
+                    if user_input_lower.startswith(fv):
+                        remainder = user_input_lower[len(fv):].strip().strip('.,!').strip()
+                        remainder = remainder.removeprefix('the ').strip()
+                        if detected_app and remainder == detected_app and auto_focused:
+                            friendly = get_friendly_app_name(detected_app)
+                            speak(f"Switched to {friendly}.")
+                            log_and_print(f"[ROUTING] Short-circuit: focus-only command, skipping LLM")
+                            log_and_print(f"[TIMING] ⏱️  Response time: {time.time() - retrieval_start_time:.2f}s (no LLM)")
+                            focus_handled = True
+                        elif not detected_app and remainder:
+                            result = window_control("focus", remainder)
+                            if "No window found" not in result:
+                                speak(result)
+                                log_and_print(f"[ROUTING] Short-circuit: focused '{remainder}' by window match, skipping LLM")
+                                log_and_print(f"[TIMING] ⏱️  Response time: {time.time() - retrieval_start_time:.2f}s (no LLM)")
+                                focus_handled = True
+                        break
+                if focus_handled:
+                    continue
 
                 # Short-circuit: date/time queries
                 _time_phrases = ('what time', 'what\'s the time', 'what is the time',
@@ -2579,6 +2588,29 @@ def run_agent():
                             toggle_matched = True
                             break
                 if toggle_matched:
+                    continue
+
+                # Short-circuit: window management (close/minimize/maximize/restore + app name)
+                window_handled = False
+                if detected_app:
+                    _window_actions = {
+                        'close': 'close', 'quit': 'close', 'exit': 'close', 'kill': 'close',
+                        'minimize': 'minimize', 'hide': 'minimize',
+                        'maximize': 'maximize',
+                        'restore': 'restore', 'unminimize': 'restore',
+                    }
+                    for verb, action in _window_actions.items():
+                        if user_input_lower.startswith(verb):
+                            remainder = user_input_lower[len(verb):].strip().strip('.,!').strip()
+                            remainder = remainder.removeprefix('the ').strip()
+                            if remainder == detected_app:
+                                result = window_control(action, detected_app)
+                                speak(result)
+                                log_and_print(f"[ROUTING] Short-circuit: {action} {detected_app}, skipping LLM")
+                                log_and_print(f"[TIMING] ⏱️  Response time: {time.time() - retrieval_start_time:.2f}s (no LLM)")
+                                window_handled = True
+                            break
+                if window_handled:
                     continue
 
                 # Build filtered tool schema with only relevant tools
