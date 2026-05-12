@@ -2723,6 +2723,65 @@ def run_agent():
                 if window_handled:
                     continue
 
+                # Short-circuit: audio controls
+                audio_handled = False
+                # Mute / unmute
+                if user_input_lower.rstrip('.') in ('mute', 'mute the sound', 'mute sound', 'mute audio'):
+                    result = audio_control("mute")
+                    speak("Muted.")
+                    audio_handled = True
+                elif any(user_input_lower.rstrip('.') == p for p in ('unmute', 'unmute the sound', 'unmute sound', 'unmute audio')):
+                    result = audio_control("unmute")
+                    speak("Unmuted.")
+                    audio_handled = True
+                # Volume up / down
+                elif any(p in user_input_lower for p in ('volume up', 'turn up', 'louder', 'raise the volume', 'raise volume', 'increase volume', 'increase the volume')):
+                    result = audio_control("volume", level=10, relative=True)
+                    speak("Volume up.")
+                    audio_handled = True
+                elif any(p in user_input_lower for p in ('volume down', 'turn down', 'quieter', 'lower the volume', 'lower volume', 'decrease volume', 'decrease the volume')):
+                    result = audio_control("volume", level=-10, relative=True)
+                    speak("Volume down.")
+                    audio_handled = True
+                # Set volume to X%
+                elif 'volume' in user_input_lower:
+                    import re
+                    vol_match = re.search(r'(\d+)\s*%?', user_input_lower)
+                    if vol_match:
+                        level = int(vol_match.group(1))
+                        result = audio_control("volume", level=level, relative=False)
+                        speak(f"Volume set to {level}%.")
+                        audio_handled = True
+                # Media controls
+                elif user_input_lower.rstrip('.') in ('play', 'play music', 'resume', 'resume playback'):
+                    result = audio_control("play")
+                    speak("Playing.")
+                    audio_handled = True
+                elif user_input_lower.rstrip('.') in ('pause', 'pause music', 'pause playback'):
+                    result = audio_control("pause")
+                    speak("Paused.")
+                    audio_handled = True
+                elif user_input_lower.rstrip('.') in ('play pause', 'play/pause', 'toggle playback'):
+                    result = audio_control("play_pause")
+                    speak("Toggled playback.")
+                    audio_handled = True
+                elif user_input_lower.rstrip('.') in ('stop', 'stop music', 'stop playback', 'stop playing'):
+                    result = audio_control("stop")
+                    speak("Stopped.")
+                    audio_handled = True
+                elif user_input_lower.rstrip('.') in ('next', 'next song', 'next track', 'skip'):
+                    result = audio_control("next")
+                    speak("Next track.")
+                    audio_handled = True
+                elif user_input_lower.rstrip('.') in ('previous', 'previous song', 'previous track', 'go back'):
+                    result = audio_control("previous")
+                    speak("Previous track.")
+                    audio_handled = True
+                if audio_handled:
+                    log_and_print(f"[ROUTING] Short-circuit: audio control, skipping LLM")
+                    log_and_print(f"[TIMING] ⏱️  Response time: {time.time() - retrieval_start_time:.2f}s (no LLM)")
+                    continue
+
                 # Short-circuit: brightness control
                 if 'brightness' in user_input_lower or 'backlight' in user_input_lower:
                     target = "keyboard" if any(w in user_input_lower for w in ('keyboard', 'kbd', 'keys')) else "screen"
