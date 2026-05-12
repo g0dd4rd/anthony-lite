@@ -2547,6 +2547,40 @@ def run_agent():
                     log_and_print(f"[TIMING] ⏱️  Response time: {time.time() - retrieval_start_time:.2f}s (no LLM)")
                     continue
 
+                # Short-circuit: system setting toggles
+                _toggle_map = {
+                    'dark mode':       'dark_mode',
+                    'dark style':      'dark_mode',
+                    'dark theme':      'dark_mode',
+                    'night light':     'night_light',
+                    'night mode':      'night_light',
+                    'do not disturb':  'do_not_disturb',
+                    'dnd':             'do_not_disturb',
+                    'wifi':            'wifi',
+                    'wi-fi':           'wifi',
+                    'bluetooth':       'bluetooth',
+                }
+                _on_verbs = ('turn on', 'enable', 'activate', 'switch on')
+                _off_verbs = ('turn off', 'disable', 'deactivate', 'switch off')
+                toggle_matched = False
+                for setting_phrase, action_name in _toggle_map.items():
+                    if setting_phrase in user_input_lower:
+                        state = None
+                        if any(v in user_input_lower for v in _on_verbs):
+                            state = 'on'
+                        elif any(v in user_input_lower for v in _off_verbs):
+                            state = 'off'
+                        if state:
+                            result = system_settings(action_name, state)
+                            state_word = "enabled" if state == "on" else "disabled"
+                            speak(f"{setting_phrase.title()} {state_word}.")
+                            log_and_print(f"[ROUTING] Short-circuit: {setting_phrase} {state}, skipping LLM")
+                            log_and_print(f"[TIMING] ⏱️  Response time: {time.time() - retrieval_start_time:.2f}s (no LLM)")
+                            toggle_matched = True
+                            break
+                if toggle_matched:
+                    continue
+
                 # Build filtered tool schema with only relevant tools
                 filtered_tools = build_filtered_tool_schema(relevant_namespaces)
                 retrieval_elapsed = time.time() - retrieval_start_time
