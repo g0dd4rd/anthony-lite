@@ -1,2 +1,33 @@
 logs/
 __pycache__/
+
+# Test/comparison scripts
+test_*.py
+compare_*.py
+debug_*.py
+
+# Test results and scratch data
+*.csv
+*_results.json
+context_size_comparison.json
+vad_vs_conversational_results.json
+
+# Scratch notes
+both.txt
+client.txt
+gemma-test.txt
+granite-test.txt
+irc.txt
+irc-alone.txt
+manual-tests.md
+
+# Old backups
+*.old
+*.backup
+*.backup2
+
+# Runtime temp files
+temp*.wav
+
+# Model files
+vosk-models/
