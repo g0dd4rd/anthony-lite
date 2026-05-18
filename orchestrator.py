@@ -35,7 +35,6 @@ os.environ['TRANSFORMERS_OFFLINE'] = '1'
 os.environ['HF_HUB_OFFLINE'] = '1'
 
 import requests
-import ollama  # Fallback for vision tasks only
 import shutil, subprocess
 import asyncio
 import json
@@ -83,7 +82,7 @@ logger = utils.logger
 # Using llama-server with Vulkan GPU acceleration (Intel Arc)
 #
 # Model: Gemma 4 E4B (8B parameters, Q4_K_M quantized, 5GB)
-# Performance: ~2x faster than Ollama CPU-only mode
+# Vision: Enabled via mmproj (multimodal projector)
 # API: OpenAI-compatible HTTP endpoint
 # ========================================
 
@@ -105,11 +104,8 @@ LLAMA_SERVER_CONFIG = {
     'device': 'Vulkan0',
     'threads': 6,
     'parallel': 1,
+    'mmproj': os.path.expanduser('~/models/mmproj-gemma-4-E4B-it-Q8_0.gguf'),
 }
-
-# Use Ollama fallback for vision tasks (llama-server doesn't support vision yet)
-VISION_FALLBACK_OLLAMA = True
-OLLAMA_VISION_MODEL = 'gemma4:e4b'
 
 # ========================================
 # End of configuration
@@ -170,6 +166,7 @@ def start_server():
         '--parallel', str(config['parallel']),
         '--cont-batching',
         '--flash-attn', 'auto',
+        '--mmproj', config['mmproj'],
     ]
 
     log_and_print(f"[SERVER] Starting llama-server on port {config['port']}...")
@@ -258,12 +255,10 @@ def call_llama_server(messages, tools=None, temperature=0.0, max_tokens=200):
         response.raise_for_status()
         result = response.json()
 
-        # Extract message in Ollama-compatible format
         choice = result['choices'][0]
         message = choice['message']
 
-        # Convert to Ollama-style response format
-        ollama_style = {
+        return {
             'message': {
                 'role': message['role'],
                 'content': message.get('content', ''),
@@ -271,8 +266,6 @@ def call_llama_server(messages, tools=None, temperature=0.0, max_tokens=200):
             },
             'eval_count': result.get('usage', {}).get('completion_tokens', 0)
         }
-
-        return ollama_style
 
     except requests.exceptions.RequestException as e:
         log_and_print(f"[ERROR] llama-server request failed: {e}", level='error')
@@ -479,8 +472,7 @@ if not ensure_server_running(force_restart=RESTART_SERVER):
 # Initialize facades with runtime dependencies
 from tools import facades
 facades.init(mcp_client, dialog_handler,
-             smart_match_window, get_friendly_app_name,
-             ollama_vision_model=OLLAMA_VISION_MODEL)
+             smart_match_window, get_friendly_app_name)
 
 # Initialize standalone tools with runtime dependencies
 from tools import standalone

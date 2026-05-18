@@ -2,7 +2,7 @@ import json
 import os
 import time
 
-import ollama
+import requests
 import webcolors
 
 from utils import log_and_print
@@ -16,15 +16,34 @@ _mcp_client = None
 _dialog_handler = None
 _smart_match_window = None
 _get_friendly_app_name = None
-_ollama_vision_model = "gemma4:e4b"
 
-def init(mcp_client, dialog_handler, smart_match_fn, friendly_name_fn, ollama_vision_model="gemma4:e4b"):
-    global _mcp_client, _dialog_handler, _smart_match_window, _get_friendly_app_name, _ollama_vision_model
+LLAMA_VISION_URL = 'http://127.0.0.1:8081/v1/chat/completions'
+
+def init(mcp_client, dialog_handler, smart_match_fn, friendly_name_fn):
+    global _mcp_client, _dialog_handler, _smart_match_window, _get_friendly_app_name
     _mcp_client = mcp_client
     _dialog_handler = dialog_handler
     _smart_match_window = smart_match_fn
     _get_friendly_app_name = friendly_name_fn
-    _ollama_vision_model = ollama_vision_model
+
+
+def _call_vision(system_prompt, user_prompt, img_base64):
+    payload = {
+        'messages': [
+            {'role': 'system', 'content': system_prompt},
+            {'role': 'user', 'content': [
+                {'type': 'text', 'text': user_prompt},
+                {'type': 'image_url', 'image_url': {
+                    'url': f'data:image/png;base64,{img_base64}'
+                }}
+            ]}
+        ],
+        'temperature': 0.7,
+        'max_tokens': 800,
+    }
+    resp = requests.post(LLAMA_VISION_URL, json=payload, timeout=120)
+    resp.raise_for_status()
+    return resp.json()['choices'][0]['message']['content']
 
 DIALOG_CHECK_SHORTCUTS = {
     'Alt+F4',
@@ -432,24 +451,11 @@ def vision_control(action: str, x: int = 0, y: int = 0, path: str = "") -> str:
                 import base64
                 img_data = base64.b64encode(img_file.read()).decode('utf-8')
 
-            response = ollama.chat(
-                model=_ollama_vision_model,
-                messages=[
-                    {
-                        'role': 'system',
-                        'content': 'You are a screen reader for visually impaired users. Describe what you see in plain text without any formatting. Do not use markdown, asterisks, or special characters. Answer directly without explaining your reasoning process.'
-                    },
-                    {
-                        'role': 'user',
-                        'content': 'What applications and windows are visible on this desktop screenshot?',
-                        'images': [img_data]
-                    }
-                ],
-                options={'num_ctx': 2048, 'num_predict': 800, 'temperature': 0.7, 'num_gpu': 99}
+            description = _call_vision(
+                'You are a screen reader for visually impaired users. Describe what you see in plain text without any formatting. Do not use markdown, asterisks, or special characters. Answer directly without explaining your reasoning process.',
+                'What applications and windows are visible on this desktop screenshot?',
+                img_data
             )
-
-            message = response.message if hasattr(response, 'message') else response['message']
-            description = message.content if hasattr(message, 'content') else message.get('content', '')
 
             try:
                 os.remove(screenshot_path)
@@ -476,24 +482,11 @@ def vision_control(action: str, x: int = 0, y: int = 0, path: str = "") -> str:
                 import base64
                 img_data = base64.b64encode(img_file.read()).decode('utf-8')
 
-            response = ollama.chat(
-                model=_ollama_vision_model,
-                messages=[
-                    {
-                        'role': 'system',
-                        'content': 'Describe the image in plain text without any formatting. Do not use markdown, asterisks, or special characters. Answer directly without explaining your reasoning process.'
-                    },
-                    {
-                        'role': 'user',
-                        'content': f'Describe this image: {os.path.basename(file_path)}',
-                        'images': [img_data]
-                    }
-                ],
-                options={'num_ctx': 2048, 'num_predict': 800, 'temperature': 0.7, 'num_gpu': 99}
+            description = _call_vision(
+                'Describe the image in plain text without any formatting. Do not use markdown, asterisks, or special characters. Answer directly without explaining your reasoning process.',
+                f'Describe this image: {os.path.basename(file_path)}',
+                img_data
             )
-
-            message = response.message if hasattr(response, 'message') else response['message']
-            description = message.content if hasattr(message, 'content') else message.get('content', '')
             return description
 
         elif action == "pick_color":

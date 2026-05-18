@@ -13,9 +13,9 @@
     --accent2: #0ea5e9;
     --accent3: #10b981;
     --accent4: #f59e0b;
-    --accent5: #8b5cf6;
+    --accent5: #a78bfa;
     --text: #e2e8f0;
-    --text-dim: #94a3b8;
+    --text-dim: #b0bec5;
     --border: #334155;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -91,6 +91,24 @@
   nav a:hover, nav a.active {
     background: var(--surface2);
     color: var(--text);
+  }
+  nav a:focus-visible {
+    outline: 2px solid var(--accent2);
+    outline-offset: 2px;
+  }
+  .skip-link {
+    position: absolute;
+    top: -100%;
+    left: 0;
+    background: var(--accent2);
+    color: #000;
+    padding: 0.5rem 1rem;
+    z-index: 200;
+    font-weight: 600;
+    text-decoration: none;
+  }
+  .skip-link:focus {
+    top: 0;
   }
   main {
     max-width: 1200px;
@@ -486,34 +504,36 @@
 </head>
 <body>
 
+<a class="skip-link" href="#data-flow">Skip to content</a>
+
 <header>
   <h1><span>Anthony</span> Architecture</h1>
   <p>Voice-driven desktop orchestrator for GNOME, powered by local LLM inference with Gemma 4 on Intel Arc via Vulkan</p>
-  <div class="stats">
+  <dl class="stats">
     <div class="stat">
-      <div class="stat-value">13</div>
-      <div class="stat-label">Tool schemas</div>
+      <dd class="stat-value">13</dd>
+      <dt class="stat-label">Tool schemas</dt>
     </div>
     <div class="stat">
-      <div class="stat-value">36+</div>
-      <div class="stat-label">Operations</div>
+      <dd class="stat-value">36+</dd>
+      <dt class="stat-label">Operations</dt>
     </div>
     <div class="stat">
-      <div class="stat-value">20+</div>
-      <div class="stat-label">Short-circuits</div>
+      <dd class="stat-value">20+</dd>
+      <dt class="stat-label">Short-circuits</dt>
     </div>
     <div class="stat">
-      <div class="stat-value">~3K</div>
-      <div class="stat-label">Lines of code</div>
+      <dd class="stat-value">~3K</dd>
+      <dt class="stat-label">Lines of code</dt>
     </div>
     <div class="stat">
-      <div class="stat-value">8</div>
-      <div class="stat-label">Modules</div>
+      <dd class="stat-value">8</dd>
+      <dt class="stat-label">Modules</dt>
     </div>
-  </div>
+  </dl>
 </header>
 
-<nav>
+<nav aria-label="Section navigation">
   <a href="#data-flow">Data Flow</a>
   <a href="#modules">Modules</a>
   <a href="#dep-graph">Dependencies</a>
@@ -530,96 +550,96 @@
 <section id="data-flow">
   <h2>Data Flow</h2>
 
-  <div class="flow-diagram">
+  <div class="flow-diagram" role="list" aria-label="Data flow pipeline from user speech to TTS response">
 
-    <div class="flow-step" style="border-color: var(--accent4);">
+    <div class="flow-step" role="listitem" style="border-color: var(--accent4);">
       <div class="step-label">User speaks</div>
       <div class="step-detail">Continuous listening via microphone, no wake word needed</div>
     </div>
 
-    <div class="flow-arrow"></div>
+    <div class="flow-arrow" role="presentation" aria-hidden="true"></div>
 
-    <div class="flow-step">
+    <div class="flow-step" role="listitem">
       <div class="step-label">VAD - Silero Voice Activity Detection</div>
       <div class="step-detail">Pre-buffer 0.3s, detect speech (threshold 0.5), record until 1.0s silence, min 0.5s speech</div>
       <div class="step-file">voice_io.py &mdash; is_speech(), listen_and_transcribe()</div>
     </div>
 
-    <div class="flow-arrow"></div>
+    <div class="flow-arrow" role="presentation" aria-hidden="true"></div>
 
-    <div class="flow-step">
+    <div class="flow-step" role="listitem">
       <div class="step-label">STT - Faster-Whisper</div>
       <div class="step-detail">medium.en model, CPU int8, beam_size=5, VAD filter enabled</div>
       <div class="step-file">voice_io.py &mdash; whisper_model.transcribe()</div>
     </div>
 
-    <div class="flow-arrow"></div>
+    <div class="flow-arrow" role="presentation" aria-hidden="true"></div>
 
-    <div class="flow-step">
+    <div class="flow-step" role="listitem">
       <div class="step-label">Mode Router</div>
       <div class="step-detail">Explicit mode switching: "switch to chat/command mode". Default: command mode.</div>
       <div class="step-file">orchestrator.py &mdash; run_agent()</div>
     </div>
 
-    <div class="flow-arrow"></div>
+    <div class="flow-arrow" role="presentation" aria-hidden="true"></div>
 
     <div class="flow-branch-label">Routes to one of two modes</div>
     <div class="flow-branch">
-      <div class="flow-step" style="border-color: var(--accent3);">
+      <div class="flow-step" role="listitem" style="border-color: var(--accent3);">
         <div class="step-label">Command Mode</div>
         <div class="step-detail">App detection, auto-focus, shortcut injection, short-circuit checks, then RAG + LLM tool calling</div>
         <div class="step-file">orchestrator.py + app_index.py</div>
       </div>
-      <div class="flow-step" style="border-color: var(--accent5);">
+      <div class="flow-step" role="listitem" style="border-color: var(--accent5);">
         <div class="step-label">Conversation Mode</div>
         <div class="step-detail">Chat with LLM, 20-turn history, temp=0.7, no tool calling</div>
         <div class="step-file">conversation.py</div>
       </div>
     </div>
 
-    <div class="flow-arrow"></div>
+    <div class="flow-arrow" role="presentation" aria-hidden="true"></div>
 
-    <div class="flow-step" style="border-color: var(--accent3);">
+    <div class="flow-step" role="listitem" style="border-color: var(--accent3);">
       <div class="step-label">Command: App Detection + Auto-Focus</div>
       <div class="step-detail">Longest n-gram match against app index. If detected: focus window (or launch via GNOME Search + wait up to 5s). Pre-fetch and inject keyboard shortcuts into prompt.</div>
       <div class="step-file">app_index.py &mdash; retrieve_relevant_namespaces() | orchestrator.py</div>
     </div>
 
-    <div class="flow-arrow"></div>
+    <div class="flow-arrow" role="presentation" aria-hidden="true"></div>
 
-    <div class="flow-step" style="border-color: var(--accent3);">
+    <div class="flow-step" role="listitem" style="border-color: var(--accent3);">
       <div class="step-label">Short-Circuit Check (20+ patterns)</div>
       <div class="step-detail">Common commands (focus, mute, screenshot, brightness, battery, etc.) execute directly without LLM. Response time &lt;100ms.</div>
       <div class="step-file">orchestrator.py &mdash; run_agent() pattern matching</div>
     </div>
 
-    <div class="flow-arrow"></div>
+    <div class="flow-arrow" role="presentation" aria-hidden="true"></div>
 
-    <div class="flow-step" style="border-color: var(--accent2);">
+    <div class="flow-step" role="listitem" style="border-color: var(--accent2);">
       <div class="step-label">RAG Namespace Selection</div>
       <div class="step-detail">Cosine similarity on SentenceTransformer embeddings (all-MiniLM-L6-v2). Top K=2 namespaces. Forced routing: window verbs &rarr; window ns, app name &rarr; input ns.</div>
       <div class="step-file">app_index.py &mdash; retrieve_relevant_namespaces(), build_filtered_tool_schema()</div>
     </div>
 
-    <div class="flow-arrow"></div>
+    <div class="flow-arrow" role="presentation" aria-hidden="true"></div>
 
-    <div class="flow-step" style="border-color: var(--accent);">
+    <div class="flow-step" role="listitem" style="border-color: var(--accent);">
       <div class="step-label">LLM Tool Calling - Gemma 4 E4B (Q4_K_M)</div>
       <div class="step-detail">llama-server on localhost:8081, Vulkan GPU (Intel Arc), temp=0.0, max 5 chaining steps. Truncation detection with auto-retry at 600 tokens.</div>
       <div class="step-file">orchestrator.py &mdash; call_llama_server() + tool chain loop</div>
     </div>
 
-    <div class="flow-arrow"></div>
+    <div class="flow-arrow" role="presentation" aria-hidden="true"></div>
 
-    <div class="flow-step">
+    <div class="flow-step" role="listitem">
       <div class="step-label">Tool Execution</div>
       <div class="step-detail">Facade tools route to MCP server (gnome-desktop-mcp). Standalone tools call system commands directly. Results feed back to LLM for chaining.</div>
       <div class="step-file">tools/facades.py, tools/standalone.py &mdash; MCP calls via mcp_client</div>
     </div>
 
-    <div class="flow-arrow"></div>
+    <div class="flow-arrow" role="presentation" aria-hidden="true"></div>
 
-    <div class="flow-step" style="border-color: var(--accent4);">
+    <div class="flow-step" role="listitem" style="border-color: var(--accent4);">
       <div class="step-label">TTS Response - Piper Neural Voice</div>
       <div class="step-detail">Strip markdown, pad short text with fillers, synthesize WAV, play via aplay</div>
       <div class="step-file">voice_io.py &mdash; speak()</div>
@@ -793,7 +813,8 @@
   </p>
 
   <div class="dep-graph">
-    <svg viewBox="0 0 900 520" width="900" height="520" xmlns="http://www.w3.org/2000/svg">
+    <svg viewBox="0 0 900 520" width="900" height="520" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Module dependency graph showing orchestrator.py at the top importing voice_io, app_index, conversation, and dialog_handler, which in turn depend on tools/facades, tools/standalone, utils, and config modules. External systems (gnome-desktop-mcp, llama-server, Ollama) are at the bottom.">
+      <title>Module dependency graph</title>
       <defs>
         <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
           <polygon points="0 0, 8 3, 0 6" fill="#94a3b8"/>
@@ -920,9 +941,9 @@
   <h3>Facade Tools (6) &mdash; consolidate 36+ MCP operations</h3>
   <table class="tool-table">
     <tr>
-      <th>Tool</th>
-      <th>Operations</th>
-      <th>Backend</th>
+      <th scope="col">Tool</th>
+      <th scope="col">Operations</th>
+      <th scope="col">Backend</th>
     </tr>
     <tr>
       <td><code>window_control</code></td>
@@ -959,8 +980,8 @@
   <h3>Standalone Tools (14) &mdash; direct system calls</h3>
   <table class="tool-table">
     <tr>
-      <th>Tool</th>
-      <th>Implementation</th>
+      <th scope="col">Tool</th>
+      <th scope="col">Implementation</th>
     </tr>
     <tr><td><code>get_battery_status()</code></td><td>upower -i battery_BAT0</td></tr>
     <tr><td><code>set_brightness(target, level)</code></td><td>brightnessctl (screen/keyboard)</td></tr>
@@ -981,8 +1002,8 @@
   <h3>Direct MCP Tools (5) &mdash; forwarded without wrappers</h3>
   <table class="tool-table">
     <tr>
-      <th>Tool</th>
-      <th>Purpose</th>
+      <th scope="col">Tool</th>
+      <th scope="col">Purpose</th>
     </tr>
     <tr><td><code>gnome_search</code></td><td>GNOME Activities launcher (with website/file routing)</td></tr>
     <tr><td><code>search_files</code></td><td>File search via localsearch index</td></tr>
@@ -998,7 +1019,7 @@
 
   <div class="ext-grid">
     <div class="ext-card">
-      <h4><span class="dot" style="background: var(--accent);"></span>llama-server</h4>
+      <h4><span class="dot" style="background: var(--accent);" aria-hidden="true"></span>llama-server</h4>
       <ul>
         <li>Gemma 4 E4B (Q4_K_M, 8B params)</li>
         <li>OpenAI-compatible API on :8081</li>
@@ -1007,7 +1028,7 @@
       </ul>
     </div>
     <div class="ext-card">
-      <h4><span class="dot" style="background: var(--accent5);"></span>gnome-desktop-mcp</h4>
+      <h4><span class="dot" style="background: var(--accent5);" aria-hidden="true"></span>gnome-desktop-mcp</h4>
       <ul>
         <li>MCP server over stdio</li>
         <li>Window, input, settings, media</li>
@@ -1016,7 +1037,7 @@
       </ul>
     </div>
     <div class="ext-card">
-      <h4><span class="dot" style="background: var(--accent3);"></span>Voice Models</h4>
+      <h4><span class="dot" style="background: var(--accent3);" aria-hidden="true"></span>Voice Models</h4>
       <ul>
         <li>Piper TTS (en_US-lessac-medium ONNX)</li>
         <li>Faster-Whisper (medium.en, int8 CPU)</li>
@@ -1025,7 +1046,7 @@
       </ul>
     </div>
     <div class="ext-card">
-      <h4><span class="dot" style="background: var(--accent4);"></span>Ollama (vision only)</h4>
+      <h4><span class="dot" style="background: var(--accent4);" aria-hidden="true"></span>Ollama (vision only)</h4>
       <ul>
         <li>Gemma 4:e4b model</li>
         <li>Fallback for describe/describe_file</li>
@@ -1034,7 +1055,7 @@
       </ul>
     </div>
     <div class="ext-card">
-      <h4><span class="dot" style="background: var(--accent2);"></span>GNOME Desktop</h4>
+      <h4><span class="dot" style="background: var(--accent2);" aria-hidden="true"></span>GNOME Desktop</h4>
       <ul>
         <li>Mutter window manager (D-Bus)</li>
         <li>gsettings (dark mode, a11y)</li>
@@ -1043,7 +1064,7 @@
       </ul>
     </div>
     <div class="ext-card">
-      <h4><span class="dot" style="background: var(--text-dim);"></span>System Tools</h4>
+      <h4><span class="dot" style="background: var(--text-dim);" aria-hidden="true"></span>System Tools</h4>
       <ul>
         <li>upower (battery)</li>
         <li>brightnessctl (brightness)</li>
@@ -1115,36 +1136,36 @@
 
   <h3>Inference Speed (Gemma 4 E4B Q4_K_M on Intel Arc Vulkan)</h3>
   <div class="perf-bar">
-    <span class="label">Generation speed</span>
-    <div class="bar">
+    <span class="label" id="perf-gen">Generation speed</span>
+    <div class="bar" role="meter" aria-labelledby="perf-gen" aria-valuenow="7" aria-valuemin="0" aria-valuemax="10" aria-valuetext="approximately 6 to 7 tokens per second">
       <div class="bar-fill" style="width: 70%; background: var(--accent2);"></div>
       <span class="bar-value">~6-7 tok/s</span>
     </div>
   </div>
   <div class="perf-bar">
-    <span class="label">Whisper transcription</span>
-    <div class="bar">
+    <span class="label" id="perf-stt">Whisper transcription</span>
+    <div class="bar" role="meter" aria-labelledby="perf-stt" aria-valuenow="200" aria-valuemin="0" aria-valuemax="1000" aria-valuetext="approximately 0.2 seconds">
       <div class="bar-fill" style="width: 20%; background: var(--accent3);"></div>
       <span class="bar-value">~0.2s</span>
     </div>
   </div>
   <div class="perf-bar">
-    <span class="label">RAG retrieval</span>
-    <div class="bar">
+    <span class="label" id="perf-rag">RAG retrieval</span>
+    <div class="bar" role="meter" aria-labelledby="perf-rag" aria-valuenow="60" aria-valuemin="0" aria-valuemax="1000" aria-valuetext="approximately 30 to 90 milliseconds">
       <div class="bar-fill" style="width: 8%; background: var(--accent4);"></div>
       <span class="bar-value">~0.03-0.09s</span>
     </div>
   </div>
   <div class="perf-bar">
-    <span class="label">Short-circuit commands</span>
-    <div class="bar">
+    <span class="label" id="perf-sc">Short-circuit commands</span>
+    <div class="bar" role="meter" aria-labelledby="perf-sc" aria-valuenow="100" aria-valuemin="0" aria-valuemax="1000" aria-valuetext="less than 100 milliseconds">
       <div class="bar-fill" style="width: 5%; background: var(--accent);"></div>
       <span class="bar-value">&lt;0.1s</span>
     </div>
   </div>
   <div class="perf-bar">
-    <span class="label">Typical LLM tool call</span>
-    <div class="bar">
+    <span class="label" id="perf-llm">Typical LLM tool call</span>
+    <div class="bar" role="meter" aria-labelledby="perf-llm" aria-valuenow="20" aria-valuemin="0" aria-valuemax="30" aria-valuetext="15 to 25 seconds">
       <div class="bar-fill" style="width: 85%; background: var(--accent5);"></div>
       <span class="bar-value">15-25s</span>
     </div>
@@ -1179,42 +1200,42 @@
 
   <div class="safety-grid">
     <div class="safety-item">
-      <div class="safety-icon">&#x1f6e1;</div>
+      <div class="safety-icon" aria-hidden="true">&#x1f6e1;</div>
       <div>
         <strong>Dialog detection</strong><br>
         <span style="color: var(--text-dim); font-size: 0.8rem;">AT-SPI/dogtail detects save dialogs on close. Reads button labels dynamically, prompts user by voice, activates choice by keyboard.</span>
       </div>
     </div>
     <div class="safety-item">
-      <div class="safety-icon">&#x1f50c;</div>
+      <div class="safety-icon" aria-hidden="true">&#x1f50c;</div>
       <div>
         <strong>Automation health checks</strong><br>
         <span style="color: var(--text-dim); font-size: 0.8rem;">Auto-enables GNOME extension if disabled. Auto-recovers on "disabled" or "not responding" errors during tool execution.</span>
       </div>
     </div>
     <div class="safety-item">
-      <div class="safety-icon">&#x26a0;</div>
+      <div class="safety-icon" aria-hidden="true">&#x26a0;</div>
       <div>
         <strong>Power action confirmation</strong><br>
         <span style="color: var(--text-dim); font-size: 0.8rem;">Suspend, restart, shutdown, and logout require explicit voice confirmation before execution.</span>
       </div>
     </div>
     <div class="safety-item">
-      <div class="safety-icon">&#x1f4e6;</div>
+      <div class="safety-icon" aria-hidden="true">&#x1f4e6;</div>
       <div>
         <strong>Install confirmation</strong><br>
         <span style="color: var(--text-dim); font-size: 0.8rem;">App install/uninstall searches first, presents options, waits for user selection and confirmation.</span>
       </div>
     </div>
     <div class="safety-item">
-      <div class="safety-icon">&#x1f504;</div>
+      <div class="safety-icon" aria-hidden="true">&#x1f504;</div>
       <div>
         <strong>Tool chain limit</strong><br>
         <span style="color: var(--text-dim); font-size: 0.8rem;">Max 5 chaining steps per command prevents infinite LLM loops. Speaks last result if limit reached.</span>
       </div>
     </div>
     <div class="safety-item">
-      <div class="safety-icon">&#x1f6a8;</div>
+      <div class="safety-icon" aria-hidden="true">&#x1f6a8;</div>
       <div>
         <strong>Error recovery</strong><br>
         <span style="color: var(--text-dim); font-size: 0.8rem;">try/except/finally around command processing. LLM errors, MCP failures, and tool exceptions don't crash the orchestrator.</span>

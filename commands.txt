@@ -1,0 +1,151 @@
+Anthony — Full Command Reference
+=================================
+
+A voice-controlled AI assistant for the GNOME desktop.
+Say any of these naturally; exact phrasing is not required.
+
+
+LAUNCHING & SEARCH
+------------------
+  "open firefox"
+  "launch calculator"
+  "start terminal"
+  "open document.pdf"
+  "open ~/Documents/report.txt"
+  "go to amazon.com"
+  "find screenshot.png"
+  "search for reports"
+
+
+WINDOW MANAGEMENT
+-----------------
+  "list windows" / "what applications are running?"
+  "focus firefox" / "switch to text editor"
+  "close terminal" / "quit firefox"
+  "minimize window" / "maximize window"
+  "restore window"
+  "take a screenshot" / "screenshot firefox"
+  "screenshot area"
+  "move firefox to the right half"
+  "tile left" / "snap to right"
+  "move window to top-left corner"
+
+
+KEYBOARD & MOUSE INPUT
+-----------------------
+  "type hello world"
+  "press ctrl+c" / "press ctrl+v" / "press alt+tab"
+  "press escape" / "press enter"
+  "click at 500 300"
+  "double click at 400 400"
+  "right click at 600 500"
+  "scroll down" / "scroll up"
+  "drag from 100 100 to 500 500"
+
+
+APP SHORTCUTS LOOKUP
+--------------------
+  "what are the shortcuts for firefox"
+  "how do I save in nautilus"
+
+
+AUDIO & MEDIA
+-------------
+  "mute" / "unmute"
+  "volume up" / "louder" / "turn up"
+  "volume down" / "quieter" / "turn down"
+  "set volume to 50"
+  "play" / "pause" / "stop"
+  "next track" / "previous track"
+
+
+SYSTEM SETTINGS
+---------------
+  "turn on dark mode" / "switch to light mode"
+  "set wallpaper to red" / "set wallpaper /path/to/image.png"
+  "turn on night light" / "turn off night light"
+  "enable do not disturb" / "disable do not disturb"
+  "turn on wifi" / "turn off wifi"
+  "turn on bluetooth" / "turn off bluetooth"
+
+
+VISION & SCREEN ANALYSIS
+-------------------------
+  "describe the screen" / "what's on the screen"
+  "describe image.png" / "what's in this picture"
+  "pick color at 500 300"
+  "get monitors" / "show monitor info"
+
+
+VIRTUAL WORKSPACES
+------------------
+  "list workspaces"
+  "switch to workspace 2"
+
+
+BATTERY & POWER INFO
+--------------------
+  "battery status" / "what's my battery level"
+  "what power mode am I on"
+  "set power mode to performance" / "balanced" / "power saver"
+
+
+BRIGHTNESS
+----------
+  "increase brightness" / "brighter"
+  "decrease brightness" / "dimmer"
+  "set brightness to 50%"
+  "max brightness" / "min brightness"
+  "keyboard brightness up" / "keyboard brightness down"
+  "keyboard backlight off"
+
+
+DATE & TIME
+-----------
+  "what time is it"
+  "what's the date"
+
+
+NOTIFICATIONS & REMINDERS
+--------------------------
+  "remind me in 5 minutes"
+  "send notification"
+  "alert me in 30 seconds"
+
+
+APP INSTALLATION
+----------------
+  "install vlc"
+  "uninstall hexchat"
+  Supports Flatpak and DNF (RPM) packages.
+  Asks for confirmation before installing or removing.
+
+
+POWER MANAGEMENT
+----------------
+  "lock screen"
+  "suspend" / "sleep"
+  "restart" / "reboot"
+  "shutdown" / "power off"
+  "logout"
+  All destructive power actions require voice confirmation.
+
+
+CONVERSATION MODE
+-----------------
+  "switch to chat mode" / "switch to conversation mode"
+  "switch to command mode"
+  "clear history" / "new topic"
+  Ask any general question — Anthony will answer using its LLM.
+  Intent is detected automatically: commands run tools,
+  questions get conversational answers.
+
+
+SCREENSHOT CLEANUP
+------------------
+  "clean up screenshots" / "delete screenshots"
+
+
+INSTALLED APPS
+--------------
+  "list installed applications" / "what apps are installed"

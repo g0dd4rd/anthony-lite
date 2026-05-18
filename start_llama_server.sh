@@ -2,6 +2,7 @@
 # Start llama-server with Gemma 4 E4B and Vulkan GPU acceleration
 
 MODEL_PATH="$HOME/models/gemma4-e4b-q4km.gguf"
+MMPROJ_PATH="$HOME/models/mmproj-gemma-4-E4B-it-Q8_0.gguf"
 LLAMA_SERVER="$HOME/llama.cpp/build/bin/llama-server"
 PORT=8081
 
@@ -50,6 +51,7 @@ echo "Starting server..."
     --parallel 1 \
     --cont-batching \
     --flash-attn auto \
+    --mmproj "$MMPROJ_PATH" \
     --log-format text \
     --metrics
 
