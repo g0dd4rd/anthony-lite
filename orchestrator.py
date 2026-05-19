@@ -407,8 +407,7 @@ from tools.facades import (window_control, input_control, audio_control,
                            system_settings, vision_control, workspace_control)
 
 # Standalone tools loaded from tools/standalone.py
-from tools.standalone import (get_battery_status, set_brightness, get_power_profile,
-                              set_power_profile, lock_screen, power_action, get_datetime,
+from tools.standalone import (get_datetime,
                               list_installed_applications, send_notification, cleanup_screenshots,
                               search_apps, run_install, run_uninstall, get_app_shortcuts)
 
@@ -720,7 +719,7 @@ def run_agent():
                 _battery_phrases = ('battery', 'charge level', 'power level',
                                     'how much charge', 'how much power')
                 if any(p in user_input_lower for p in _battery_phrases):
-                    result = get_battery_status()
+                    result = mcp_client.call_tool("get_battery_status", {})
                     speak(result)
                     log_and_print(f"[ROUTING] Short-circuit: battery query, skipping LLM")
                     log_and_print(f"[TIMING] ⏱️  Response time: {time.time() - retrieval_start_time:.2f}s (no LLM)")
@@ -938,7 +937,7 @@ def run_agent():
                         if pct_match:
                             level = f"{pct_match.group(1)}%"
                     if level:
-                        result = set_brightness(target, level)
+                        result = mcp_client.call_tool("set_brightness", {"target": target, "level": level})
                         speak(result)
                         log_and_print(f"[ROUTING] Short-circuit: {target} brightness {level}, skipping LLM")
                         log_and_print(f"[TIMING] ⏱️  Response time: {time.time() - retrieval_start_time:.2f}s (no LLM)")
@@ -947,15 +946,15 @@ def run_agent():
                 # Short-circuit: power profile
                 if 'power mode' in user_input_lower or 'power profile' in user_input_lower or 'power saver' in user_input_lower:
                     if any(w in user_input_lower for w in ('what', 'current', 'which', 'get', 'check')):
-                        result = get_power_profile()
+                        result = mcp_client.call_tool("get_power_profile", {})
                     elif 'performance' in user_input_lower:
-                        result = set_power_profile("performance")
+                        result = mcp_client.call_tool("set_power_profile", {"profile": "performance"})
                     elif 'balanced' in user_input_lower:
-                        result = set_power_profile("balanced")
+                        result = mcp_client.call_tool("set_power_profile", {"profile": "balanced"})
                     elif any(w in user_input_lower for w in ('power saver', 'power-saver', 'saving')):
-                        result = set_power_profile("power-saver")
+                        result = mcp_client.call_tool("set_power_profile", {"profile": "power-saver"})
                     else:
-                        result = get_power_profile()
+                        result = mcp_client.call_tool("get_power_profile", {})
                     speak(result)
                     log_and_print(f"[ROUTING] Short-circuit: power profile, skipping LLM")
                     log_and_print(f"[TIMING] ⏱️  Response time: {time.time() - retrieval_start_time:.2f}s (no LLM)")
@@ -963,7 +962,7 @@ def run_agent():
 
                 # Short-circuit: lock screen
                 if any(p in user_input_lower for p in ('lock screen', 'lock the screen', 'lock my screen')):
-                    result = lock_screen()
+                    result = mcp_client.call_tool("lock_screen", {})
                     speak(result)
                     log_and_print(f"[ROUTING] Short-circuit: lock screen, skipping LLM")
                     log_and_print(f"[TIMING] ⏱️  Response time: {time.time() - retrieval_start_time:.2f}s (no LLM)")
@@ -991,7 +990,7 @@ def run_agent():
                     speak(_power_confirmations[power_matched])
                     confirmation = listen_and_transcribe()
                     if confirmation and any(w in confirmation.lower() for w in ('yes', 'yeah', 'yep', 'sure', 'do it', 'confirm', 'go ahead')):
-                        result = power_action(power_matched)
+                        result = mcp_client.call_tool("power_action", {"action": power_matched})
                         speak(result)
                     else:
                         speak("Canceled.")
