@@ -64,7 +64,7 @@ echo "This script will install all dependencies for:"
 echo "  - Voice recognition (Whisper)"
 echo "  - Text-to-speech (Piper)"
 echo "  - Desktop automation (MCP)"
-echo "  - Conversational AI (Gemma4)"
+echo "  - LLM tool calling (Gemma4 via llama-server)"
 echo "  - Volume & media control (PipeWire/PulseAudio, playerctl)"
 echo ""
 read -p "Continue? (y/n) " -n 1 -r
@@ -126,7 +126,6 @@ print_step "Installing Python dependencies..."
 
 # Install packages one by one to better track progress
 PYTHON_PACKAGES=(
-    "ollama"
     "sounddevice"
     "pyaudio"
     "faster-whisper"
@@ -135,6 +134,8 @@ PYTHON_PACKAGES=(
     "torch"
     "numpy"
     "sentence-transformers"
+    "requests"
+    "webcolors"
     "dogtail"
 )
 
@@ -177,31 +178,9 @@ else
 fi
 
 # ========================================
-# 4. Ollama & Models
+# 4. Piper Voice Model
 # ========================================
-print_header "Step 4: Installing Ollama & Gemma4"
-
-if ! command -v ollama &> /dev/null; then
-    print_step "Installing Ollama..."
-    curl -fsSL https://ollama.com/install.sh | sh
-    print_success "Ollama installed"
-else
-    print_success "Ollama already installed"
-fi
-
-print_step "Checking if Gemma4 model is available..."
-if ! ollama list | grep -q "gemma4:e4b"; then
-    print_step "Pulling Gemma4 model (this may take several minutes)..."
-    ollama pull gemma4:e4b
-    print_success "Gemma4 model downloaded"
-else
-    print_success "Gemma4 model already available"
-fi
-
-# ========================================
-# 5. Piper Voice Model
-# ========================================
-print_header "Step 5: Downloading Piper Voice Model"
+print_header "Step 4: Downloading Piper Voice Model"
 
 PIPER_MODEL_DIR="$HOME/anthony"
 PIPER_MODEL_FILE="$PIPER_MODEL_DIR/en_US-lessac-medium.onnx"
@@ -215,9 +194,9 @@ else
 fi
 
 # ========================================
-# 6. GNOME Accessibility
+# 5. GNOME Accessibility
 # ========================================
-print_header "Step 6: Configuring GNOME Accessibility"
+print_header "Step 5: Configuring GNOME Accessibility"
 
 ACCESSIBILITY=$(gsettings get org.gnome.desktop.interface toolkit-accessibility)
 
@@ -231,9 +210,9 @@ else
 fi
 
 # ========================================
-# 7. Verification
+# 6. Verification
 # ========================================
-print_header "Step 7: Verifying Installation"
+print_header "Step 6: Verifying Installation"
 
 VERIFICATION_FAILED=0
 
@@ -241,7 +220,6 @@ print_step "Checking system commands..."
 check_command "python3" || VERIFICATION_FAILED=1
 check_command "pip" || VERIFICATION_FAILED=1
 check_command "git" || VERIFICATION_FAILED=1
-check_command "ollama" || VERIFICATION_FAILED=1
 check_command "anthony-mcp" || VERIFICATION_FAILED=1
 check_command "aplay" || VERIFICATION_FAILED=1
 check_command "pactl" || VERIFICATION_FAILED=1
@@ -249,7 +227,6 @@ check_command "playerctl" || VERIFICATION_FAILED=1
 
 echo ""
 print_step "Checking Python modules..."
-check_python_module "ollama" || VERIFICATION_FAILED=1
 check_python_module "sounddevice" || VERIFICATION_FAILED=1
 check_python_module "pyaudio" || VERIFICATION_FAILED=1
 check_python_module "faster_whisper" || VERIFICATION_FAILED=1
@@ -258,16 +235,9 @@ check_python_module "mcp" || VERIFICATION_FAILED=1
 check_python_module "torch" || VERIFICATION_FAILED=1
 check_python_module "numpy" || VERIFICATION_FAILED=1
 check_python_module "sentence_transformers" || VERIFICATION_FAILED=1
+check_python_module "requests" || VERIFICATION_FAILED=1
+check_python_module "webcolors" || VERIFICATION_FAILED=1
 check_python_module "dogtail.tree" || VERIFICATION_FAILED=1
-
-echo ""
-print_step "Checking Ollama models..."
-if ollama list | grep -q "gemma4:e4b"; then
-    print_success "Gemma4 model is available"
-else
-    print_error "Gemma4 model is not available"
-    VERIFICATION_FAILED=1
-fi
 
 echo ""
 print_step "Checking Piper voice model..."
