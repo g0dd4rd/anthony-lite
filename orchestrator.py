@@ -349,7 +349,7 @@ log_and_print("[SYSTEM] Initializing dialog handler...")
 dialog_handler = DialogHandler()
 
 # Voice I/O loaded from voice_io.py
-from voice_io import speak, listen_and_transcribe
+from voice_io import speak, listen_and_transcribe, check_audio_health
 
 # ----------------------------------------
 # Health Check & Auto-Recovery
@@ -550,6 +550,11 @@ def run_agent():
     current_mode = 'command'  # Start in command mode (explicit switching only)
     conversation_history = []
     command_messages = [command_system_msg]
+
+    # Check audio health (mic + output)
+    log_and_print("[SYSTEM] Checking audio health...")
+    if not check_audio_health():
+        log_and_print("[SYSTEM] ⚠️  Audio issue detected — voice commands may not work", level='warning')
 
     # Notify user that system is ready
     log_and_print("[SYSTEM] ✓ Voice orchestrator ready")

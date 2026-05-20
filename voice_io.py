@@ -112,6 +112,43 @@ def is_speech(audio_chunk, vad_model, rate=16000, threshold=0.5):
         return True
 
 
+def check_audio_health():
+    """Check mic and output state. Warns via TTS if mic is muted/unavailable."""
+    try:
+        result = subprocess.run(
+            ["pactl", "get-sink-mute", "@DEFAULT_SINK@"],
+            capture_output=True, text=True, timeout=5)
+        output_muted = "yes" in result.stdout.lower()
+        if output_muted:
+            log_and_print("[AUDIO] Output is muted, unmuting to deliver warnings")
+            subprocess.run(["pactl", "set-sink-mute", "@DEFAULT_SINK@", "0"], timeout=5)
+    except Exception as e:
+        log_and_print(f"[AUDIO] Could not check output mute state: {e}", level='warning')
+
+    try:
+        result = subprocess.run(
+            ["pactl", "get-source-mute", "@DEFAULT_SOURCE@"],
+            capture_output=True, text=True, timeout=5)
+        mic_muted = "yes" in result.stdout.lower()
+        if mic_muted:
+            log_and_print("[AUDIO] Microphone is muted!", level='warning')
+            speak("Warning: your microphone is muted. Please unmute it.")
+            return False
+    except Exception as e:
+        log_and_print(f"[AUDIO] Could not check mic mute state: {e}", level='warning')
+
+    try:
+        p = pyaudio.PyAudio()
+        p.get_default_input_device_info()
+        p.terminate()
+    except Exception:
+        log_and_print("[AUDIO] No microphone device found!", level='warning')
+        speak("Warning: no microphone detected. Please connect one.")
+        return False
+
+    return True
+
+
 def get_default_input_device():
     """Get the current system default input device index."""
     try:
