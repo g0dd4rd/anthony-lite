@@ -9,6 +9,7 @@ import numpy as np
 import sounddevice  # noqa: F401 — suppresses ALSA verbose errors before pyaudio init
 import pyaudio
 import torch
+torch.backends.nnpack.enabled = False
 from faster_whisper import WhisperModel
 from piper.voice import PiperVoice
 

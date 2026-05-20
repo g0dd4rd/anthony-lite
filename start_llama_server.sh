@@ -1,13 +1,33 @@
 #!/bin/bash
-# Start llama-server with Gemma 4 E4B and Vulkan GPU acceleration
+# Start llama-server with Gemma 4 and Vulkan GPU acceleration
+#
+# Usage:
+#   ./start_llama_server.sh          # default: e2b
+#   ./start_llama_server.sh e2b      # Gemma 4 E2B Q8_0 (faster, ~12-15 tok/s)
+#   ./start_llama_server.sh e4b      # Gemma 4 E4B Q4_K_M (slower, ~6-7 tok/s)
 
-MODEL_PATH="$HOME/models/gemma4-e4b-q4km.gguf"
-MMPROJ_PATH="$HOME/models/mmproj-gemma-4-E4B-it-Q8_0.gguf"
+VARIANT="${1:-e2b}"
 LLAMA_SERVER="$HOME/llama.cpp/build/bin/llama-server"
 PORT=8081
 
-echo "🚀 Starting llama-server with Vulkan GPU acceleration"
+case "$VARIANT" in
+    e2b)
+        MODEL_PATH="$HOME/models/gemma-4-E2B-it-Q8_0.gguf"
+        MMPROJ_PATH="$HOME/models/mmproj-BF16.gguf"
+        ;;
+    e4b)
+        MODEL_PATH="$HOME/models/gemma4-e4b-q4km.gguf"
+        MMPROJ_PATH="$HOME/models/mmproj-gemma-4-E4B-it-Q8_0.gguf"
+        ;;
+    *)
+        echo "Unknown variant: $VARIANT (use e2b or e4b)"
+        exit 1
+        ;;
+esac
+
+echo "Starting llama-server with Vulkan GPU acceleration"
 echo "=================================================="
+echo "Variant: $VARIANT"
 echo "Model: $MODEL_PATH"
 echo "Port: $PORT"
 echo "API: http://127.0.0.1:$PORT"
@@ -52,7 +72,6 @@ echo "Starting server..."
     --cont-batching \
     --flash-attn auto \
     --mmproj "$MMPROJ_PATH" \
-    --log-format text \
     --metrics
 
 echo ""
