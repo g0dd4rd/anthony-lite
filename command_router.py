@@ -263,6 +263,18 @@ def try_short_circuit(user_input, user_input_lower, detected_app, auto_focused,
                         log_and_print(f"[ROUTING] Tiling failed: {e}", level='warning')
                 break
 
+    # --- Mute/unmute tab (before audio controls to avoid conflict) ---
+    _mute_tab_phrases = ('mute tab', 'mute the tab', 'mute this tab',
+                         'silence tab', 'silence the tab', 'silence this tab')
+    _unmute_tab_phrases = ('unmute tab', 'unmute the tab', 'unmute this tab')
+    if any(p in user_input_lower for p in _mute_tab_phrases + _unmute_tab_phrases):
+        from tools.facades import input_control
+        input_control("key_combo", keys="ctrl+m", app_name=detected_app or "")
+        action_word = "Unmuted" if any(p in user_input_lower for p in _unmute_tab_phrases) else "Muted"
+        _speak(f"{action_word} tab.")
+        _log_shortcircuit("mute/unmute tab", retrieval_start_time)
+        return True
+
     # --- Audio controls ---
     audio_handled = False
     if user_input_lower in ('mute', 'mute the sound', 'mute sound', 'mute audio'):
