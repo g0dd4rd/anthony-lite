@@ -97,8 +97,6 @@ Input: "{user_input}"
 
 Reply with ONE word only: command or conversation"""
 
-COMMAND_SYSTEM_MSG = "You are a silent system orchestrator. Your ONLY job is to execute tool calls based on user intent. DO NOT output conversational text. DO NOT confirm actions. DO NOT be polite. If you need to use a tool, output ONLY the tool call. FORGET gedit and USE gnome-text-editor. When a command requires multiple steps, make tool calls one at a time. After receiving tool results, either make another tool call or return a brief spoken summary. Keep summaries under 2 sentences."
-
 CONVERSATION_PROMPT = """You are a helpful AI assistant.
 Answer questions clearly and concisely.
 Keep responses under 3 sentences unless more detail is requested.

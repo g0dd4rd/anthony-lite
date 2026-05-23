@@ -6,7 +6,6 @@ from sentence_transformers import SentenceTransformer
 
 from utils import log_and_print
 from config.aliases import APP_SHORTCUT_ALIASES
-from config.namespaces import NAMESPACES
 
 # ----------------------------------------
 # Desktop Application Indexing
@@ -15,28 +14,11 @@ app_name_map = {}
 app_friendly_name = {}
 app_names_only = set()
 
-namespaces = NAMESPACES
-
 # ----------------------------------------
-# Embedding model + namespace embeddings
+# Embedding model (used by command_matcher for semantic fallback)
 # ----------------------------------------
-log_and_print("[SYSTEM] Loading embedding model for tool retrieval...")
+log_and_print("[SYSTEM] Loading embedding model...")
 embedding_model = SentenceTransformer('all-MiniLM-L6-v2', device='cpu')
-
-namespace_names = list(namespaces.keys())
-namespace_descriptions = [namespaces[ns]["description"] for ns in namespace_names]
-namespace_embeddings = embedding_model.encode(namespace_descriptions, convert_to_tensor=True)
-log_and_print(f"[SYSTEM] Loaded embeddings for {len(namespace_names)} namespaces")
-
-# ----------------------------------------
-# Dependency injection (set via init())
-# ----------------------------------------
-_tool_schema_full = None
-
-
-def init(tool_schema_full):
-    global _tool_schema_full
-    _tool_schema_full = tool_schema_full
 
 
 def build_app_index():
@@ -271,90 +253,3 @@ def detect_app_in_input(user_input: str) -> str:
             if phrase in app_names_only and not (n == 1 and phrase in _ambiguous_app_names):
                 return phrase
     return None
-
-
-# ----------------------------------------
-# RAG: Tool Retrieval + Filtering (legacy, to be removed)
-# ----------------------------------------
-
-def retrieve_relevant_namespaces(user_input: str, top_k: int = 2) -> tuple:
-    """Retrieve most relevant namespaces using semantic similarity + verb routing.
-    Returns (namespaces_list, detected_app_name_or_None)."""
-    from sentence_transformers.util import cos_sim
-
-    user_input_lower = user_input.lower().rstrip('.!?,;')
-
-    forced_namespaces = []
-
-    window_verbs = ['close', 'quit', 'exit', 'kill', 'minimize', 'maximize', 'restore',
-                    'focus', 'switch to', 'move', 'resize', 'screenshot']
-    if any(verb in user_input_lower for verb in window_verbs):
-        if 'window' not in forced_namespaces:
-            forced_namespaces.append('window')
-
-    system_phrases = ['clean up', 'cleanup', 'notification', 'notify me',
-                      'remind me', 'what apps', 'installed app', 'list app']
-    if any(phrase in user_input_lower for phrase in system_phrases):
-        if 'system' not in forced_namespaces:
-            forced_namespaces.append('system')
-
-    vision_phrases = ['describe', 'what color', 'pick color', 'what monitor',
-                      'which monitor', 'how many monitor']
-    if any(phrase in user_input_lower for phrase in vision_phrases):
-        if 'vision' not in forced_namespaces:
-            forced_namespaces.append('vision')
-
-    words = [w.strip(string.punctuation) for w in user_input_lower.split()]
-    words = [w for w in words if w]
-    detected_app = None
-    for n in range(len(words), 0, -1):
-        for i in range(len(words) - n + 1):
-            phrase = ' '.join(words[i:i+n])
-            if phrase in app_names_only and not (n == 1 and phrase in _ambiguous_app_names):
-                detected_app = phrase
-                if 'input' not in forced_namespaces:
-                    forced_namespaces.append('input')
-                    log_and_print(f"[ROUTING] Detected app '{phrase}' -> forcing input namespace")
-                break
-        else:
-            continue
-        break
-
-    adjusted_top_k = max(1, top_k - len(forced_namespaces))
-
-    query_embedding = embedding_model.encode(user_input, convert_to_tensor=True)
-    similarities = cos_sim(query_embedding, namespace_embeddings)[0]
-    top_indices = similarities.argsort(descending=True)[:adjusted_top_k]
-    semantic_namespaces = [namespace_names[i] for i in top_indices]
-
-    relevant_namespaces = forced_namespaces.copy()
-    for ns in semantic_namespaces:
-        if ns not in relevant_namespaces:
-            relevant_namespaces.append(ns)
-
-    relevant_namespaces = relevant_namespaces[:top_k]
-
-    log_and_print(f"[RETRIEVAL] Query: '{user_input}'")
-    if forced_namespaces:
-        log_and_print(f"[ROUTING] Forced namespaces: {forced_namespaces}")
-    for i, ns in enumerate(relevant_namespaces):
-        score = similarities[namespace_names.index(ns)].item()
-        forced_marker = " [FORCED]" if ns in forced_namespaces else ""
-        log_and_print(f"  {i+1}. {ns} (score: {score:.3f}) - {len(namespaces[ns]['tools'])} tools{forced_marker}")
-
-    return relevant_namespaces, detected_app
-
-
-def build_filtered_tool_schema(relevant_namespaces: list) -> list:
-    """Build filtered tool schema from relevant namespaces."""
-    relevant_tool_names = set()
-    for ns in relevant_namespaces:
-        relevant_tool_names.update(namespaces[ns]["tools"])
-
-    filtered_schema = [tool for tool in _tool_schema_full
-                      if tool["function"]["name"] in relevant_tool_names]
-
-    log_and_print(f"[FILTER] Showing {len(filtered_schema)} tools from {len(relevant_namespaces)} namespaces")
-    log_and_print(f"  Tools: {[t['function']['name'] for t in filtered_schema]}")
-
-    return filtered_schema

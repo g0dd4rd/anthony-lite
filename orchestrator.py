@@ -1,29 +1,10 @@
 #!/usr/bin/env python3
 """
-Voice-Driven Desktop Orchestrator with CONSOLIDATED TOOLS (Facade Pattern)
+Anthony Lite — Voice-Driven Desktop Orchestrator
 
-This version uses the facade pattern to consolidate 34 individual tools into 11 tools:
-- 6 facade tools (window_control, input_control, audio_control, system_settings, vision_control, workspace_control)
-- 4 standalone tools (list_installed_applications, send_notification, cleanup_screenshots, get_datetime)
-- 1 search tool (gnome_search)
-
-Benefits:
-- ⚡ 2-3× faster inference (~17-20s vs 41-69s with 34 tools)
-- 🔧 All original functionality preserved through internal routing
-- 📊 Clearer namespace organization for RAG
-- 🚀 Scales to 100+ features without performance degradation
-
-Features:
-- ✅ VAD continuous listening
-- ✅ Configurable AI models (granite, gemma4, etc.)
-- ✅ Vision support for screen analysis
-- ✅ Tool calling for desktop automation (CONSOLIDATED)
-- ✅ SAFE close handling with dialog detection
-- ✅ Conversation mode - chat with AI for questions/help
-- ✅ Automatic intent detection - seamlessly switches between command & chat
-
-Configuration:
-To change models, edit the MODEL CONFIGURATION section below
+Pattern-matched command execution for fast desktop automation.
+Commands are handled by @step decorated handlers (~1ms matching).
+LLM is only used for conversation mode and vision.
 """
 
 import os
@@ -406,100 +387,29 @@ def check_automation_health(auto_enable=True, retries=3) -> tuple[bool, str]:
 
 
 # ========================================
-# APP INDEXING + RAG (loaded from app_index.py)
+# APP INDEXING
 # ========================================
 import app_index
 from app_index import (build_app_index, smart_match_window, get_friendly_app_name,
-                       get_installed_gui_apps, detect_app_in_input,
-                       retrieve_relevant_namespaces, build_filtered_tool_schema)
+                       get_installed_gui_apps, detect_app_in_input)
 
-# Facade tools loaded from tools/facades.py
-from tools.facades import (window_control, input_control, audio_control,
-                           system_settings, vision_control, workspace_control)
-
-# Standalone tools loaded from tools/standalone.py
-from tools.standalone import (get_datetime,
-                              list_installed_applications, send_notification, cleanup_screenshots,
-                              search_apps, run_install, run_uninstall, get_app_shortcuts)
-
-# Conversation mode loaded from conversation.py
+# Conversation mode
 import conversation
-from conversation import classify_intent_type, handle_conversation
-
-# ========================================
-# TOOL REGISTRY
-# ========================================
-
-# Available tools (facade + standalone + direct MCP)
-available_tools = {
-    # Facade tools
-    "window_control": window_control,
-    "input_control": input_control,
-    "audio_control": audio_control,
-    "system_settings": system_settings,
-    "vision_control": vision_control,
-    "workspace_control": workspace_control,
-
-    # Standalone tools
-    "list_installed_applications": list_installed_applications,
-    "send_notification": send_notification,
-    "cleanup_screenshots": cleanup_screenshots,
-    "get_app_shortcuts": get_app_shortcuts,
-    "get_datetime": get_datetime,
-}
-
-# Direct MCP tools (forwarded without wrappers)
-direct_mcp_tools = [
-    "gnome_search",      # GNOME search overlay
-    "search_files",      # File search via localsearch (returns paths)
-    "ping",              # Health check
-    "get_enabled",       # Check automation status
-    "set_enabled",       # Enable/disable automation
-]
-
-# ========================================
-# CONSOLIDATED TOOL SCHEMA (13 tools total)
-# ========================================
-
-from config.tool_schemas import TOOL_SCHEMAS
-tool_schema_full = TOOL_SCHEMAS
-tool_schema = tool_schema_full
-
-log_and_print(f"[SYSTEM] ✓ Consolidated tool schema: {len(tool_schema_full)} tools")
+from conversation import handle_conversation
 
 # ========================================
 # MODULE INITIALIZATION
 # ========================================
 
-# Initialize app_index with tool schema
-app_index.init(tool_schema_full)
-
-# Ensure llama-server is running
+# Ensure llama-server is running (needed for conversation mode)
 if not ensure_server_running(force_restart=RESTART_SERVER):
     log_and_print("[SERVER] ❌ Failed to start llama-server. Exiting.")
     sys.exit(1)
 
-# Initialize facades with runtime dependencies
-from tools import facades
-facades.init(mcp_client, dialog_handler,
-             smart_match_window, get_friendly_app_name)
-
-# Initialize standalone tools with runtime dependencies
-from tools import standalone
-standalone.init(mcp_client, get_installed_gui_apps)
-
 # Initialize conversation module
 conversation.init(call_llama_server, debug=DEBUG)
 
-# Initialize command router and LLM chain
-import command_router
-command_router.init(mcp_client, speak, listen_and_transcribe)
-
-import llm_chain
-llm_chain.init(mcp_client, call_llama_server, speak,
-               check_automation_health, debug=DEBUG)
-
-# Initialize new command pipeline (step definitions + matcher)
+# Initialize command pipeline (step definitions + matcher)
 import commands
 commands.init(mcp_client, speak, listen_and_transcribe,
               smart_match_window, get_friendly_app_name,
