@@ -1,6 +1,6 @@
 # Offline Setup for Voice Orchestrator
 
-The voice orchestrator uses a semantic embedding model for intelligent tool selection. This requires a **one-time download** of the model, after which the system works completely offline.
+The voice orchestrator uses a semantic embedding model for command matching fallback. This requires a **one-time download** of the model, after which the system works completely offline.
 
 ## One-Time Setup (Requires Internet)
 
@@ -91,7 +91,7 @@ If you need to install on a machine without internet access:
 ## Model Details
 
 - **Name:** all-MiniLM-L6-v2
-- **Purpose:** Semantic text embedding for tool namespace matching
+- **Purpose:** Semantic text embedding for command matching fallback
 - **Size:** ~80MB
 - **License:** Apache 2.0
 - **Source:** HuggingFace / sentence-transformers

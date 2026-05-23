@@ -5,7 +5,7 @@
 Run the automated installation script:
 
 ```bash
-cd ~/anthony
+cd ~/anthony-lite
 ./install.sh
 ```
 
@@ -30,7 +30,7 @@ The script will:
 - `faster-whisper` - Speech-to-text (Whisper medium.en)
 - `piper-tts` - Neural text-to-speech
 - `torch` - PyTorch (for Silero VAD + sentence-transformers)
-- `sentence-transformers` - Semantic embeddings for tool routing
+- `sentence-transformers` - Semantic embeddings for command matching fallback
 - `pyaudio` - Microphone recording
 - `sounddevice` - ALSA warning suppression
 - `numpy` - Numerical operations
@@ -69,13 +69,13 @@ pip install sounddevice pyaudio faster-whisper piper-tts mcp torch numpy \
 
 ### 3. Anthony MCP
 ```bash
-git clone https://github.com/g0dd4rd/anthony-mcp.git ~/anthony-mcp
-cd ~/anthony-mcp && ./install.sh
+git clone https://github.com/g0dd4rd/anthony-mcp.git ~/anthony-lite-mcp
+cd ~/anthony-lite-mcp && ./install.sh
 ```
 
 ### 4. Piper Voice Model
 ```bash
-cd ~/anthony
+cd ~/anthony-lite
 python3 -m piper.download_voices --download-dir . en_US-lessac-medium
 ```
 
@@ -98,7 +98,7 @@ python3 -c "import sounddevice, pyaudio, faster_whisper, piper, mcp, torch, \
     sentence_transformers, requests, webcolors, dogtail"
 
 # Check Piper model
-ls -lh ~/anthony/en_US-lessac-medium.onnx*
+ls -lh ~/anthony-lite/en_US-lessac-medium.onnx*
 
 # Check accessibility
 gsettings get org.gnome.desktop.interface toolkit-accessibility
@@ -110,7 +110,7 @@ curl -s http://localhost:8081/health
 ## First Run
 
 ```bash
-cd ~/anthony
+cd ~/anthony-lite
 ./orchestrator.py
 ```
 
@@ -127,7 +127,7 @@ pip install pyaudio
 
 ### MCP server not found
 ```bash
-cd ~/anthony-mcp && pip install -e mcp-server
+cd ~/anthony-lite-mcp && pip install -e mcp-server
 which anthony-mcp  # Should return a path
 ```
 
@@ -160,7 +160,7 @@ pip uninstall anthony-mcp
 sudo dnf remove portaudio-devel python3-devel
 
 # Models and caches
-rm -rf ~/anthony/en_US-lessac-medium.onnx*
+rm -rf ~/anthony-lite/en_US-lessac-medium.onnx*
 rm -rf ~/.cache/huggingface
 rm -rf ~/.cache/torch
 ```

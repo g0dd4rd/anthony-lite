@@ -1,8 +1,10 @@
-# Anthony
+# Anthony Lite
 
-Voice-driven desktop orchestrator for GNOME, powered by local LLM inference.
+Lightweight voice-driven desktop orchestrator for GNOME/Linux.
 
-Anthony listens to natural voice commands and controls the GNOME desktop -- managing windows, typing text, adjusting settings, launching apps, describing the screen, and more. Everything runs locally: speech recognition, language model, and text-to-speech. No cloud services, no API keys.
+Anthony Lite listens to natural voice commands and controls the GNOME desktop -- managing windows, typing text, adjusting settings, launching apps, describing the screen, and more. Everything runs locally: speech recognition, pattern matching, and text-to-speech. No cloud services, no API keys.
+
+This is the lightweight fork of [anthony](https://github.com/g0dd4rd/anthony), optimized for hardware with limited GPU. The full anthony uses an LLM for all command routing; anthony-lite replaces that with `@step` decorated handlers and semantic fallback, achieving ~1ms response times for most commands.
 
 ## Requirements
 
@@ -15,19 +17,19 @@ Anthony listens to natural voice commands and controls the GNOME desktop -- mana
 ## Quick Start
 
 ```bash
-git clone https://github.com/g0dd4rd/anthony.git ~/anthony
-cd ~/anthony
+git clone https://github.com/g0dd4rd/anthony-lite.git ~/anthony-lite
+cd ~/anthony-lite
 ./install.sh
 ./orchestrator.py
 ```
 
 The install script handles system packages, Python dependencies, the Piper voice model, and anthony-mcp setup. First run downloads the Whisper STT model (~1.5GB) and Silero VAD (~2MB) automatically.
 
-llama-server with a Gemma 4 model must be running on port 8081. See `start_llama_server.sh` for the recommended launch command.
+llama-server with a Gemma 4 model must be running on port 8081 for conversation mode and vision features. See `start_llama_server.sh` for the recommended launch command.
 
 ## Usage
 
-Speak naturally -- Anthony uses voice activity detection (no wake word). Say "switch to chat mode" for open-ended conversation, "switch to command mode" to return to desktop control.
+Speak naturally -- Anthony Lite uses voice activity detection (no wake word). Say "switch to chat mode" for open-ended conversation, "switch to command mode" to return to desktop control. Say "help" for available commands.
 
 ```
 ./orchestrator.py           # continuous listening
@@ -49,44 +51,46 @@ Speak naturally -- Anthony uses voice activity detection (no wake word). Say "sw
 | "describe the screen" | Vision analysis via Gemma 4 |
 | "what time is it" | Instant response (no LLM) |
 | "set brightness to 70" | Screen brightness via MCP |
+| "help" / "help with audio" | Lists available commands |
 
 See [commands.txt](commands.txt) for the full command reference.
 
 ## How It Works
 
 1. **Silero VAD** detects speech, **Faster-Whisper** transcribes it
-2. **Short-circuit router** handles 20+ common patterns instantly (<100ms)
-3. For everything else, **RAG** selects relevant tool namespaces, then **Gemma 4** plans and executes tool calls via the agentic loop
-4. Tools execute through **anthony-mcp** (GNOME Shell extension) or direct system calls
-5. **Piper TTS** speaks the result
+2. **Pattern matching** via `@step` decorated handlers extracts typed params from patterns (~1ms)
+3. If no pattern matches, **sentence-transformers** semantic fallback finds the closest command (~50ms, threshold 0.55)
+4. Compound commands are split on "and"/"then" with verb carry-forward and pronoun resolution
+5. Tools execute through **anthony-mcp** (GNOME Shell extension) via MCP protocol
+6. **Piper TTS** speaks the result
 
-The system is split into 10 Python modules (~3.4K lines). See [architecture.html](architecture.html) for the full data flow, dependency graph, and module details.
+The LLM (Gemma 4 via llama-server) is only used for conversation mode and vision -- not for command routing.
 
 ## Project Structure
 
 ```
-orchestrator.py         Main entry point, server lifecycle, agent loop
-command_router.py       Short-circuit patterns, RAG context, app auto-focus
-llm_chain.py            Agentic LLM tool-calling loop
+orchestrator.py         Main entry point, server lifecycle, voice loop
+command_matcher.py      Two-tier matching: parse patterns + semantic fallback
 voice_io.py             VAD, STT (Whisper), TTS (Piper)
-app_index.py            App indexing, window matching, RAG retrieval
+app_index.py            App indexing, window matching, embedding model
 conversation.py         Chat mode with conversation history
 dialog_handler.py       Save dialog detection via AT-SPI
 mcp_client.py           MCP protocol client
-tools/facades.py        6 facade tools wrapping 36+ MCP operations
-tools/standalone.py     8 standalone tools (datetime, apps, shortcuts, etc.)
-config/                 Tool schemas, namespaces, prompts, aliases
+commands/               @step decorated handlers (window, audio, input, etc.)
+config/                 Aliases, prompts
 shortcuts/              Curated keyboard shortcut data per app
+tools/                  AT-SPI discovery script
 ```
 
 ## Documentation
 
 - [commands.txt](commands.txt) -- Full voice command reference
-- [architecture.html](architecture.html) -- Interactive architecture overview
+- [ANTHONY-LITE.md](ANTHONY-LITE.md) -- Project map for AI agents
 - [INSTALL.md](INSTALL.md) -- Detailed installation guide
 - [DEPENDENCIES.md](DEPENDENCIES.md) -- Complete dependency list
 - [SETUP-OFFLINE.md](SETUP-OFFLINE.md) -- Offline setup for embedding model
 
 ## Related
 
+- [anthony](https://github.com/g0dd4rd/anthony) -- Full LLM-routed version (for faster hardware)
 - [anthony-mcp](https://github.com/g0dd4rd/anthony-mcp) -- GNOME Shell extension and MCP server

@@ -1,11 +1,11 @@
-# Anthony Dependencies
+# Anthony Lite Dependencies
 
 ## Python packages
 | Package | Purpose |
 |---|---|
 | faster-whisper | Speech-to-text (Whisper model) |
 | piper-tts | Text-to-speech (Piper neural voice) |
-| sentence-transformers | Semantic embedding for tool routing |
+| sentence-transformers | Semantic embedding for command matching fallback |
 | torch | ML backend for Silero VAD + sentence-transformers |
 | numpy | Array operations |
 | pyaudio | Microphone input |
@@ -36,8 +36,8 @@
 ## AI models
 | Model | Purpose | Location |
 |---|---|---|
-| Gemma 4 E4B (Q4_K_M) | Tool-calling + vision LLM | llama-server on port 8081 (Vulkan GPU) |
+| Gemma 4 E4B (Q4_K_M) | Conversation mode + vision (not used for command routing) | llama-server on port 8081 (Vulkan GPU) |
 | faster-whisper medium.en | Speech-to-text | Auto-downloads on first run (~1.5GB) |
 | Piper en_US-lessac-medium | Text-to-speech | Local .onnx file (~60MB) |
-| all-MiniLM-L6-v2 | Sentence embeddings for RAG routing | Auto-downloads on first run (~80MB) |
+| all-MiniLM-L6-v2 | Sentence embeddings for semantic command matching fallback | Auto-downloads on first run (~80MB) |
 | Silero VAD | Voice activity detection | Auto-downloads on first run (~2MB) |
