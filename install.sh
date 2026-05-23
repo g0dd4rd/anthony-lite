@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Installation script for Voice-Driven Orchestrator (Conversational Mode)
+# Installation script for Anthony Lite - Voice-Driven Desktop Orchestrator
 #
 # This script installs all dependencies and verifies the installation.
 #
@@ -64,7 +64,7 @@ echo "This script will install all dependencies for:"
 echo "  - Voice recognition (Whisper)"
 echo "  - Text-to-speech (Piper)"
 echo "  - Desktop automation (MCP)"
-echo "  - LLM tool calling (Gemma4 via llama-server)"
+echo "  - Command matching (sentence-transformers)"
 echo "  - Volume & media control (PipeWire/PulseAudio, playerctl)"
 echo ""
 read -p "Continue? (y/n) " -n 1 -r
@@ -172,7 +172,7 @@ if ! command -v anthony-mcp &> /dev/null; then
         print_success "anthony-mcp installed from GitHub"
     fi
 
-    cd "$HOME/anthony"
+    cd "$HOME/anthony-lite"
 else
     print_success "anthony-mcp already installed"
 fi
@@ -182,7 +182,7 @@ fi
 # ========================================
 print_header "Step 4: Downloading Piper Voice Model"
 
-PIPER_MODEL_DIR="$HOME/anthony"
+PIPER_MODEL_DIR="$HOME/anthony-lite"
 PIPER_MODEL_FILE="$PIPER_MODEL_DIR/en_US-lessac-medium.onnx"
 
 if [ ! -f "$PIPER_MODEL_FILE" ]; then
@@ -266,7 +266,7 @@ if [ $VERIFICATION_FAILED -eq 0 ]; then
     print_success "All dependencies installed and verified!"
     echo ""
     echo "You can now run the orchestrator:"
-    echo -e "  ${GREEN}cd ~/anthony${NC}"
+    echo -e "  ${GREEN}cd ~/anthony-lite${NC}"
     echo -e "  ${GREEN}./orchestrator.py${NC}"
     echo ""
     echo "First run will download additional models:"
