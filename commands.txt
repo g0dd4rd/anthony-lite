@@ -43,6 +43,21 @@ KEYBOARD & MOUSE INPUT
   "drag from 100 100 to 500 500"
 
 
+APP SHORTCUTS (context-aware)
+-----------------------------
+  "next tab" / "previous tab"
+  "new tab" / "close tab"
+  "copy" / "paste" / "cut"
+  "select all"
+  "undo" / "redo"
+  "find" / "find in page"
+  "zoom in" / "zoom out"
+  "full screen"
+  "new window"
+  These use the correct shortcut for the focused app
+  (e.g. Ctrl+T in Firefox, Ctrl+Shift+T in Terminal).
+
+
 APP SHORTCUTS LOOKUP
 --------------------
   "what are the shortcuts for firefox"

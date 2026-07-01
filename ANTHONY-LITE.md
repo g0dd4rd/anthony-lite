@@ -25,7 +25,7 @@ Voice Input (mic)
           ┌──────────────────┐   ┌─────────────┐
           │ command_matcher  │   │ conversation │
           │ .py              │   │ .py          │
-          │ (pattern + sem.) │   │ (LLM chat)   │
+          │ (pattern match)  │   │ (LLM chat)   │
           └────────┬─────────┘   └─────────────┘
                    │
                    ▼
@@ -87,6 +87,7 @@ Each module registers `@step` decorated handlers with patterns, category, and he
 | `settings.py` | settings | dark mode, night light, DND, wifi, bluetooth, wallpaper |
 | `brightness.py` | brightness | set/increase/decrease brightness |
 | `power.py` | power | lock, sleep, restart, shut down |
+| `shortcuts.py` | shortcuts | next/previous/new/close tab, copy, paste, cut, undo, redo, find, zoom, full screen, new window |
 | `apps.py` | apps | install/uninstall apps, keyboard shortcuts lookup |
 | `help.py` | help | "help", "help with {category}" — lists available commands from registry |
 | `__init__.py` | — | `CommandRegistry` class, `step` decorator, `init()` wiring |
@@ -105,6 +106,28 @@ Each module registers `@step` decorated handlers with patterns, category, and he
 | `gnome_shortcuts.py` | Reads keyboard shortcuts from gsettings schemas at runtime |
 | `app_shortcuts.json` | Curated per-app shortcut database |
 
+### features/ — BDD Tests
+
+Behave-based test suite for the command pipeline. Each `.feature` file covers a command category; `features/steps/common.py` provides shared step definitions. `features/environment.py` sets up mock MCP client, speaker, and listener for isolated testing without a running desktop.
+
+| File | Coverage |
+|---|---|
+| `window.feature` | focus, close, minimize, maximize, tile, screenshot |
+| `audio.feature` | volume, mute, play/pause, tracks |
+| `input.feature` | click, type, key combos, scroll, drag |
+| `search.feature` | open app/URL/file |
+| `system.feature` | time, notifications, reminders, list apps |
+| `vision.feature` | describe screen, pick color |
+| `workspace.feature` | list/switch workspaces |
+| `settings.feature` | dark mode, night light, DND, wifi, bluetooth |
+| `brightness.feature` | set/increase/decrease brightness |
+| `power.feature` | lock, sleep, restart, shutdown |
+| `help.feature` | help, help with category |
+| `compound.feature` | compound commands, verb carry-forward |
+| `semantic.feature` | unrecognized input handling |
+
+Run with: `behave` (from project root)
+
 ### tools/
 
 | File | Purpose |
@@ -114,7 +137,7 @@ Each module registers `@step` decorated handlers with patterns, category, and he
 ## Key Design Patterns
 
 ### @step Decorator (commands/)
-Commands are defined as decorated functions. The decorator registers patterns, category, and help text in a central `CommandRegistry`. The same definitions serve as pattern matcher input, help system source, and (future) BDD test targets.
+Commands are defined as decorated functions. The decorator registers patterns, category, and help text in a central `CommandRegistry`. The same definitions serve as pattern matcher input, help system source, and BDD test targets.
 
 ```python
 @step('set volume to {level:d}', 'volume {level:d}',
@@ -125,7 +148,7 @@ def handle_set_volume(context, level):
 ```
 
 ### Pattern Matching (command_matcher.py)
-`parse` library extracts typed params from ~95 patterns across 13 command modules (~1ms). Compound commands are split on "and"/"then", with verb carry-forward ("minimize firefox and chrome" → minimize firefox, minimize chrome) and pronoun resolution.
+`parse` library extracts typed params from ~95 patterns across 14 command modules (~1ms). Compound commands are split on "and"/"then", with verb carry-forward ("minimize firefox and chrome" → minimize firefox, minimize chrome) and pronoun resolution.
 
 ### Dependency Injection
 Modules use `init()` functions to receive runtime dependencies (mcp_client, speak, etc.). The orchestrator wires everything at startup. Command handlers access shared state via module-level globals set by `commands.init()`.
@@ -161,6 +184,9 @@ python orchestrator.py --debug
 
 # Discover AT-SPI names for dialog handler
 python tools/discover_a11y.py
+
+# Run BDD tests
+behave
 ```
 
 Requires: llama-server running (auto-started), anthony-mcp installed, GNOME accessibility enabled (auto-enabled).

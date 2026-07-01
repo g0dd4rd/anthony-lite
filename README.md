@@ -51,6 +51,8 @@ Speak naturally -- Anthony Lite uses voice activity detection (no wake word). Sa
 | "describe the screen" | Vision analysis via Gemma 4 |
 | "what time is it" | Instant response (no LLM) |
 | "set brightness to 70" | Screen brightness via MCP |
+| "next tab" / "close tab" | App-aware shortcut (correct keys per app) |
+| "copy" / "paste" / "undo" | Clipboard and editing via app shortcuts |
 | "help" / "help with audio" | Lists available commands |
 
 See [commands.txt](commands.txt) for the full command reference.
@@ -58,7 +60,7 @@ See [commands.txt](commands.txt) for the full command reference.
 ## How It Works
 
 1. **Silero VAD** detects speech, **Faster-Whisper** transcribes it
-2. **Pattern matching** via `@step` decorated handlers (~95 patterns across 13 modules, ~1ms)
+2. **Pattern matching** via `@step` decorated handlers (~95 patterns across 14 modules, ~1ms)
 3. Compound commands are split on "and"/"then" with verb carry-forward and pronoun resolution
 4. Tools execute through **anthony-mcp** (GNOME Shell extension) via MCP protocol
 5. **Piper TTS** speaks the result
@@ -75,9 +77,10 @@ app_index.py            App indexing, window matching, app detection
 conversation.py         Chat mode with conversation history
 dialog_handler.py       Save dialog detection via AT-SPI
 mcp_client.py           MCP protocol client
-commands/               @step decorated handlers (window, audio, input, etc.)
+commands/               @step decorated handlers (window, audio, input, shortcuts, etc.)
 config/                 Aliases, prompts
 shortcuts/              Curated keyboard shortcut data per app
+features/               BDD test suite (behave)
 tools/                  AT-SPI discovery script
 ```
 
@@ -87,6 +90,16 @@ tools/                  AT-SPI discovery script
 - [ANTHONY-LITE.md](ANTHONY-LITE.md) -- Project map for AI agents
 - [INSTALL.md](INSTALL.md) -- Detailed installation guide
 - [DEPENDENCIES.md](DEPENDENCIES.md) -- Complete dependency list
+
+## Testing
+
+```bash
+behave              # run all BDD tests
+behave features/window.feature  # run one category
+```
+
+Tests use a mock MCP client and don't require a running desktop or llama-server.
+
 ## Related
 
 - [anthony](https://github.com/g0dd4rd/anthony) -- Full LLM-routed version (for faster hardware)

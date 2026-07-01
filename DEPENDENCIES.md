@@ -13,6 +13,8 @@
 | webcolors | Color name lookup for pick_color |
 | mcp | MCP client (Model Context Protocol) |
 | dogtail | GNOME accessibility / dialog detection via AT-SPI |
+| parse | Pattern-based command matching |
+| behave | BDD test framework (dev dependency) |
 
 ## System packages (Fedora/RHEL)
 | Package | Purpose |
