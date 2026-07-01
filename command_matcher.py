@@ -9,9 +9,6 @@ from utils import log_and_print
 _mcp_client = None
 _speak = None
 _registry = None
-_embedding_model = None
-_command_embeddings = None
-_command_entries_map = None
 _detect_app_fn = None
 _check_health_fn = None
 
@@ -32,67 +29,16 @@ _SPLIT_PATTERN = re.compile(
 _PRONOUN_WORDS = {'it', 'that', 'the window', 'the app', 'this window', 'this app'}
 
 
-def init(registry, mcp_client, speak_fn, embedding_model, detect_app_fn,
+def init(registry, mcp_client, speak_fn, detect_app_fn,
          check_health_fn=None):
     global _registry, _mcp_client, _speak
-    global _embedding_model, _command_embeddings, _command_entries_map
     global _detect_app_fn, _check_health_fn
     _registry = registry
     _mcp_client = mcp_client
     _speak = speak_fn
-    _embedding_model = embedding_model
     _detect_app_fn = detect_app_fn
     _check_health_fn = check_health_fn
-    _build_command_embeddings()
-
-
-def _build_command_embeddings():
-    global _command_embeddings, _command_entries_map
-    patterns = []
-    entry_indices = []
-    for i, entry in enumerate(_registry.entries):
-        for pattern in entry['patterns']:
-            display = re.sub(r'\{[^}]*\}', 'something', pattern)
-            patterns.append(display)
-            entry_indices.append(i)
-
-    if patterns:
-        _command_embeddings = _embedding_model.encode(patterns, convert_to_tensor=True)
-        _command_entries_map = entry_indices
-        log_and_print(f"[MATCHER] Pre-computed embeddings for {len(patterns)} command patterns")
-    else:
-        _command_embeddings = None
-        _command_entries_map = []
-
-
-def _semantic_match(text, threshold=0.55):
-    if _command_embeddings is None:
-        return None, {}
-
-    from sentence_transformers.util import cos_sim
-    from parse import parse
-
-    query_embedding = _embedding_model.encode(text, convert_to_tensor=True)
-    similarities = cos_sim(query_embedding, _command_embeddings)[0]
-    best_idx = similarities.argmax().item()
-    best_score = similarities[best_idx].item()
-
-    if best_score < threshold:
-        log_and_print(f"[MATCHER] Semantic: no match above threshold "
-                      f"(best={best_score:.3f} < {threshold})")
-        return None, {}
-
-    entry = _registry.entries[_command_entries_map[best_idx]]
-    log_and_print(f"[MATCHER] Semantic match: {entry['name']} "
-                  f"(score={best_score:.3f})")
-
-    text_clean = text.strip().rstrip('.!?,;')
-    for pattern in entry['patterns']:
-        result = parse(pattern, text_clean, case_sensitive=False)
-        if result:
-            return entry, result.named
-
-    return entry, {}
+    log_and_print(f"[MATCHER] Registered {len(_registry.entries)} command handlers")
 
 
 def _preprocess(text):
@@ -180,9 +126,6 @@ def execute(user_input, context=None):
             entry, params = _registry.match(augmented)
             if entry:
                 log_and_print(f"[MATCHER] Verb carry-forward: '{augmented}'")
-
-        if not entry:
-            entry, params = _semantic_match(segment)
 
         if entry:
             sig = inspect.signature(entry['handler'])

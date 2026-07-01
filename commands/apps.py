@@ -1,8 +1,10 @@
+import json
 import os
 import re
 import subprocess
 
 from commands import step, _mcp_client, _speak, _listen
+from config.aliases import APP_SHORTCUT_ALIASES
 from utils import log_and_print
 
 _CONFIRM_WORDS = ('yes', 'yeah', 'yep', 'sure', 'do it', 'confirm', 'go ahead')
@@ -203,12 +205,24 @@ def handle_uninstall(context, query):
       'show shortcuts for {app}',
       category='apps', help_text='Look up keyboard shortcuts for an application')
 def handle_shortcuts(context, app):
-    from tools.standalone import get_app_shortcuts
-    shortcut_info = get_app_shortcuts(app)
-    if shortcut_info.startswith("No shortcuts"):
-        return shortcut_info
+    app_lower = app.lower().strip()
+    shortcuts_dir = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "shortcuts"
+    )
+    json_path = os.path.join(shortcuts_dir, "app_shortcuts.json")
+    try:
+        with open(json_path) as f:
+            curated = json.load(f)
+    except Exception:
+        return f"No shortcuts found for '{app}'"
 
-    shortcuts_only = shortcut_info.split("\nSkills (")[0]
-    lines = shortcuts_only.splitlines()
-    shortcuts = [l.lstrip('- ').strip() for l in lines if l.startswith('- ')]
-    return f"Shortcuts for {app}: " + ", ".join(shortcuts)
+    lookup_key = APP_SHORTCUT_ALIASES.get(app_lower, app_lower)
+    app_shortcuts = curated.get(lookup_key, {})
+    app_shortcuts = {k: v for k, v in app_shortcuts.items() if not k.startswith("_")}
+
+    if not app_shortcuts:
+        return f"No shortcuts found for '{app}'"
+
+    items = [f"{action}: {shortcut}" for action, shortcut in app_shortcuts.items()]
+    return f"Shortcuts for {app}: " + ", ".join(items)

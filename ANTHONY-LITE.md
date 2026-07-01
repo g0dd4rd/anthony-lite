@@ -7,7 +7,7 @@
 
 Anthony Lite is a voice-driven desktop orchestrator for GNOME/Linux. Users speak natural language commands to control windows, launch apps, manage audio, take screenshots, and more. Commands are handled by fast pattern matching (~1ms). A local LLM (gemma4 via llama-server) is only used for conversation mode and vision — not for command routing.
 
-This is the lightweight fork of [anthony](https://github.com/g0dd4rd/anthony), optimized for hardware with limited GPU. The full anthony uses LLM for all command routing; anthony-lite replaces that with `@step` decorated handlers and semantic fallback.
+This is the lightweight fork of [anthony](https://github.com/g0dd4rd/anthony), optimized for hardware with limited GPU. The full anthony uses an embedding model for semantic command fallback; anthony-lite uses pure pattern matching via `@step` decorated handlers.
 
 ## Architecture Overview
 
@@ -50,7 +50,7 @@ Voice Input (mic)
 3. **Command path:**
    - `command_matcher.execute()` preprocesses input (number words, dashes, percent)
    - Splits compound commands on "and"/"then" with pronoun resolution
-   - For each segment: exact pattern match → verb carry-forward → semantic fallback (sentence-transformers, threshold 0.55)
+   - For each segment: exact pattern match → verb carry-forward
    - Validates required handler params via `inspect.signature()` before calling
    - Handler calls `mcp_client.call_tool()` directly — no facade layer
 4. **Conversation path:** `conversation.handle_conversation()` sends to llama-server for LLM response
@@ -64,8 +64,8 @@ Voice Input (mic)
 |---|---|
 | `orchestrator.py` | Entry point. llama-server lifecycle, module init, voice loop. CLI: `--ptt`, `--debug`, `--restart-server`, `--kill-server` |
 | `voice_io.py` | STT (faster-whisper + Silero VAD) and TTS (Piper). Exports `speak()`, `listen_and_transcribe()`, `check_audio_health()` |
-| `command_matcher.py` | Two-tier matching: parse-based patterns (~1ms) → sentence-transformer semantic fallback (~50ms). Handles compound commands, pronoun resolution, auto-recovery |
-| `app_index.py` | App indexing via Gio.AppInfo. Builds `app_name_map` (name→exec), `smart_match_window()`, `get_friendly_app_name()`, `detect_app_in_input()`. Loads sentence-transformers embedding model |
+| `command_matcher.py` | Pattern matching via `registry.match()` (~1ms). Handles compound commands, segment splitting, pronoun resolution, verb carry-forward, auto-recovery |
+| `app_index.py` | App indexing via Gio.AppInfo. Builds `app_name_map` (name→exec), `smart_match_window()`, `get_friendly_app_name()`, `detect_app_in_input()` |
 | `conversation.py` | LLM chat mode. Multi-turn conversation via llama-server |
 | `dialog_handler.py` | Safe close handling via dogtail (AT-SPI/a11y). Detects save/discard dialogs filtered by app name, reads options, activates buttons via keyboard |
 | `mcp_client.py` | Standalone MCP client for testing |
@@ -124,11 +124,8 @@ def handle_set_volume(context, level):
     return f"Volume set to {level}"
 ```
 
-### Two-Tier Matching (command_matcher.py)
-1. **Exact match** — `parse` library extracts typed params from patterns (~1ms)
-2. **Semantic fallback** — sentence-transformers cosine similarity against all patterns (~50ms, threshold 0.55)
-
-Compound commands are split on "and"/"then", with verb carry-forward ("minimize firefox and chrome" → minimize firefox, minimize chrome) and pronoun resolution.
+### Pattern Matching (command_matcher.py)
+`parse` library extracts typed params from ~95 patterns across 13 command modules (~1ms). Compound commands are split on "and"/"then", with verb carry-forward ("minimize firefox and chrome" → minimize firefox, minimize chrome) and pronoun resolution.
 
 ### Dependency Injection
 Modules use `init()` functions to receive runtime dependencies (mcp_client, speak, etc.). The orchestrator wires everything at startup. Command handlers access shared state via module-level globals set by `commands.init()`.
@@ -142,7 +139,6 @@ When closing a window: (1) resolve AT-SPI name from `APP_A11Y_NAMES`, (2) send c
 - **faster-whisper** `medium.en` — speech-to-text (CPU, int8)
 - **Silero VAD** — voice activity detection (torch)
 - **Piper** `en_US-lessac-medium` — text-to-speech (ONNX)
-- **sentence-transformers** `all-MiniLM-L6-v2` — semantic matching for command fallback (CPU)
 
 ### LLM Server (separate process)
 - **llama-server** (llama.cpp) running gemma4-e4b with Vulkan GPU on port 8081

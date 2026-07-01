@@ -2,8 +2,6 @@ import os
 import re
 import string
 
-from sentence_transformers import SentenceTransformer
-
 from utils import log_and_print
 from config.aliases import APP_SHORTCUT_ALIASES
 
@@ -13,12 +11,6 @@ from config.aliases import APP_SHORTCUT_ALIASES
 app_name_map = {}
 app_friendly_name = {}
 app_names_only = set()
-
-# ----------------------------------------
-# Embedding model (used by command_matcher for semantic fallback)
-# ----------------------------------------
-log_and_print("[SYSTEM] Loading embedding model...")
-embedding_model = SentenceTransformer('all-MiniLM-L6-v2', device='cpu')
 
 
 def build_app_index():

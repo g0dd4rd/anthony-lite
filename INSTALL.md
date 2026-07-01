@@ -11,7 +11,7 @@ cd ~/anthony-lite
 
 The script will:
 1. Install system packages (ALSA, PortAudio, PipeWire utils, playerctl)
-2. Install Python packages (PyAudio, Whisper, Piper, MCP, sentence-transformers, etc.)
+2. Install Python packages (PyAudio, Whisper, Piper, MCP, etc.)
 3. Install Anthony MCP server (GNOME extension + MCP bridge)
 4. Download Piper voice model
 5. Enable GNOME accessibility (required for dialog detection)
@@ -29,8 +29,7 @@ The script will:
 ### Python Packages (via pip)
 - `faster-whisper` - Speech-to-text (Whisper medium.en)
 - `piper-tts` - Neural text-to-speech
-- `torch` - PyTorch (for Silero VAD + sentence-transformers)
-- `sentence-transformers` - Semantic embeddings for command matching fallback
+- `torch` - PyTorch (for Silero VAD)
 - `pyaudio` - Microphone recording
 - `sounddevice` - ALSA warning suppression
 - `numpy` - Numerical operations
@@ -48,8 +47,6 @@ The script will:
 - **Piper en_US-lessac-medium** - Neural voice (~60MB, downloaded by install script)
 - **Whisper medium.en** - STT (~1.5GB, auto-downloads on first run)
 - **Silero VAD** - Voice activity detection (~2MB, auto-downloads on first run)
-- **all-MiniLM-L6-v2** - Sentence embeddings (~80MB, auto-downloads on first run)
-
 You also need a Gemma 4 model running via llama-server (not installed by this script). See `start_llama_server.sh`.
 
 ## Manual Installation
@@ -64,7 +61,7 @@ sudo dnf install -y alsa-utils portaudio-devel python3-devel pipewire-utils play
 ### 2. Python Packages
 ```bash
 pip install sounddevice pyaudio faster-whisper piper-tts mcp torch numpy \
-    sentence-transformers requests webcolors dogtail
+    requests webcolors dogtail parse
 ```
 
 ### 3. Anthony MCP
@@ -95,7 +92,7 @@ which python3 pip anthony-mcp aplay pactl playerctl
 
 # Check Python modules
 python3 -c "import sounddevice, pyaudio, faster_whisper, piper, mcp, torch, \
-    sentence_transformers, requests, webcolors, dogtail"
+    requests, webcolors, dogtail, parse"
 
 # Check Piper model
 ls -lh ~/anthony-lite/en_US-lessac-medium.onnx*
@@ -114,7 +111,7 @@ cd ~/anthony-lite
 ./orchestrator.py
 ```
 
-First run will auto-download Whisper, Silero VAD, and sentence-transformer models.
+First run will auto-download Whisper and Silero VAD models.
 
 ## Troubleshooting
 
@@ -142,7 +139,7 @@ gsettings set org.gnome.desktop.interface toolkit-accessibility true
 - **OS**: Fedora (or compatible RPM-based distro)
 - **RAM**: 16GB+ recommended
 - **GPU**: Vulkan-capable (tested on Intel Arc A770M)
-- **Disk**: ~5GB free (for voice/embedding models)
+- **Disk**: ~5GB free (for voice models)
 - **Audio**: Working microphone and speakers
 - **Desktop**: GNOME with Wayland or X11
 
@@ -151,7 +148,7 @@ gsettings set org.gnome.desktop.interface toolkit-accessibility true
 ```bash
 # Python packages
 pip uninstall sounddevice pyaudio faster-whisper piper-tts mcp torch numpy \
-    sentence-transformers requests webcolors dogtail
+    requests webcolors dogtail parse
 
 # MCP server
 pip uninstall anthony-mcp

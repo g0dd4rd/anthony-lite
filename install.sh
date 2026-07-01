@@ -64,7 +64,7 @@ echo "This script will install all dependencies for:"
 echo "  - Voice recognition (Whisper)"
 echo "  - Text-to-speech (Piper)"
 echo "  - Desktop automation (MCP)"
-echo "  - Command matching (sentence-transformers)"
+echo "  - Command matching (parse)"
 echo "  - Volume & media control (PipeWire/PulseAudio, playerctl)"
 echo ""
 read -p "Continue? (y/n) " -n 1 -r
@@ -135,7 +135,6 @@ PYTHON_PACKAGES=(
     "torchaudio"
     "numpy"
     "parse"
-    "sentence-transformers"
     "requests"
     "webcolors"
     "dogtail"
@@ -237,7 +236,6 @@ check_python_module "mcp" || VERIFICATION_FAILED=1
 check_python_module "torch" || VERIFICATION_FAILED=1
 check_python_module "torchaudio" || VERIFICATION_FAILED=1
 check_python_module "numpy" || VERIFICATION_FAILED=1
-check_python_module "sentence_transformers" || VERIFICATION_FAILED=1
 check_python_module "requests" || VERIFICATION_FAILED=1
 check_python_module "webcolors" || VERIFICATION_FAILED=1
 check_python_module "dogtail.tree" || VERIFICATION_FAILED=1

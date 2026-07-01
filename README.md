@@ -4,7 +4,7 @@ Lightweight voice-driven desktop orchestrator for GNOME/Linux.
 
 Anthony Lite listens to natural voice commands and controls the GNOME desktop -- managing windows, typing text, adjusting settings, launching apps, describing the screen, and more. Everything runs locally: speech recognition, pattern matching, and text-to-speech. No cloud services, no API keys.
 
-This is the lightweight fork of [anthony](https://github.com/g0dd4rd/anthony), optimized for hardware with limited GPU. The full anthony uses an LLM for all command routing; anthony-lite replaces that with `@step` decorated handlers and semantic fallback, achieving ~1ms response times for most commands.
+This is the lightweight fork of [anthony](https://github.com/g0dd4rd/anthony), optimized for hardware with limited GPU. The full anthony uses an embedding model for semantic command fallback; anthony-lite uses pure pattern matching via `@step` decorated handlers, achieving ~1ms response times for all commands.
 
 ## Requirements
 
@@ -58,11 +58,10 @@ See [commands.txt](commands.txt) for the full command reference.
 ## How It Works
 
 1. **Silero VAD** detects speech, **Faster-Whisper** transcribes it
-2. **Pattern matching** via `@step` decorated handlers extracts typed params from patterns (~1ms)
-3. If no pattern matches, **sentence-transformers** semantic fallback finds the closest command (~50ms, threshold 0.55)
-4. Compound commands are split on "and"/"then" with verb carry-forward and pronoun resolution
-5. Tools execute through **anthony-mcp** (GNOME Shell extension) via MCP protocol
-6. **Piper TTS** speaks the result
+2. **Pattern matching** via `@step` decorated handlers (~95 patterns across 13 modules, ~1ms)
+3. Compound commands are split on "and"/"then" with verb carry-forward and pronoun resolution
+4. Tools execute through **anthony-mcp** (GNOME Shell extension) via MCP protocol
+5. **Piper TTS** speaks the result
 
 The LLM (Gemma 4 via llama-server) is only used for conversation mode and vision -- not for command routing.
 
@@ -70,9 +69,9 @@ The LLM (Gemma 4 via llama-server) is only used for conversation mode and vision
 
 ```
 orchestrator.py         Main entry point, server lifecycle, voice loop
-command_matcher.py      Two-tier matching: parse patterns + semantic fallback
+command_matcher.py      Pattern matching, segment splitting, verb carry-forward
 voice_io.py             VAD, STT (Whisper), TTS (Piper)
-app_index.py            App indexing, window matching, embedding model
+app_index.py            App indexing, window matching, app detection
 conversation.py         Chat mode with conversation history
 dialog_handler.py       Save dialog detection via AT-SPI
 mcp_client.py           MCP protocol client
@@ -88,8 +87,6 @@ tools/                  AT-SPI discovery script
 - [ANTHONY-LITE.md](ANTHONY-LITE.md) -- Project map for AI agents
 - [INSTALL.md](INSTALL.md) -- Detailed installation guide
 - [DEPENDENCIES.md](DEPENDENCIES.md) -- Complete dependency list
-- [SETUP-OFFLINE.md](SETUP-OFFLINE.md) -- Offline setup for embedding model
-
 ## Related
 
 - [anthony](https://github.com/g0dd4rd/anthony) -- Full LLM-routed version (for faster hardware)

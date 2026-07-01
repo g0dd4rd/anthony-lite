@@ -10,19 +10,6 @@ LLM is only used for conversation mode and vision.
 import os
 import sys
 
-# Ensure Whisper model is cached before enabling offline mode
-from faster_whisper.utils import download_model as _dl_whisper
-try:
-    _dl_whisper("medium.en", local_files_only=True)
-except Exception:
-    print("[SYSTEM] Whisper model not cached, downloading (~1.5GB)...")
-    _dl_whisper("medium.en")
-
-# Force offline mode for sentence-transformers BEFORE import
-# This prevents internet checks to HuggingFace Hub
-os.environ['TRANSFORMERS_OFFLINE'] = '1'
-os.environ['HF_HUB_OFFLINE'] = '1'
-
 import requests
 import shutil, subprocess
 import asyncio
@@ -425,7 +412,7 @@ commands.init(mcp_client, speak, listen_and_transcribe,
 
 import command_matcher
 command_matcher.init(commands.registry, mcp_client, speak,
-                     app_index.embedding_model, detect_app_in_input,
+                     detect_app_in_input,
                      check_health_fn=check_automation_health)
 
 # Log app discovery
