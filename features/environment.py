@@ -2,9 +2,9 @@ import json
 import os
 import sys
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-os.environ['TRANSFORMERS_OFFLINE'] = '1'
-os.environ['HF_HUB_OFFLINE'] = '1'
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+os.environ["TRANSFORMERS_OFFLINE"] = "1"
+os.environ["HF_HUB_OFFLINE"] = "1"
 
 
 # ---------------------------------------------------------------------------
@@ -12,15 +12,30 @@ os.environ['HF_HUB_OFFLINE'] = '1'
 # ---------------------------------------------------------------------------
 
 SAMPLE_WINDOWS = [
-    {"id": 1001, "title": "Untitled Document - Text Editor",
-     "wmClass": "org.gnome.TextEditor", "focused": True,
-     "maximized": False, "minimized": False},
-    {"id": 1002, "title": "Mozilla Firefox",
-     "wmClass": "firefox", "focused": False,
-     "maximized": False, "minimized": False},
-    {"id": 1003, "title": "Terminal",
-     "wmClass": "org.gnome.Ptyxis", "focused": False,
-     "maximized": False, "minimized": False},
+    {
+        "id": 1001,
+        "title": "Untitled Document - Text Editor",
+        "wmClass": "org.gnome.TextEditor",
+        "focused": True,
+        "maximized": False,
+        "minimized": False,
+    },
+    {
+        "id": 1002,
+        "title": "Mozilla Firefox",
+        "wmClass": "firefox",
+        "focused": False,
+        "maximized": False,
+        "minimized": False,
+    },
+    {
+        "id": 1003,
+        "title": "Terminal",
+        "wmClass": "org.gnome.Ptyxis",
+        "focused": False,
+        "maximized": False,
+        "minimized": False,
+    },
 ]
 
 DEFAULT_MCP_RESPONSES = {
@@ -32,10 +47,9 @@ DEFAULT_MCP_RESPONSES = {
     "unmaximize_window": lambda args: "OK",
     "unminimize_window": lambda args: "OK",
     "move_resize_window": lambda args: "OK",
-    "get_monitors": lambda args: json.dumps([
-        {"width": 1920, "height": 1080, "x": 0, "y": 0,
-         "scale": 1, "primary": True}
-    ]),
+    "get_monitors": lambda args: json.dumps(
+        [{"width": 1920, "height": 1080, "x": 0, "y": 0, "scale": 1, "primary": True}]
+    ),
     "screenshot": lambda args: "/tmp/test_screenshot.png",
     "screenshot_window": lambda args: "/tmp/test_window_screenshot.png",
     "get_volume": lambda args: json.dumps({"volume": 50, "muted": False}),
@@ -52,7 +66,9 @@ DEFAULT_MCP_RESPONSES = {
     "mouse_double_click": lambda args: "OK",
     "mouse_scroll": lambda args: "OK",
     "mouse_drag": lambda args: "OK",
-    "quick_settings": lambda args: f"Set {args.get('setting', 'setting')} to {args.get('enabled', True)}",
+    "quick_settings": lambda args: (
+        f"Set {args.get('setting', 'setting')} to {args.get('enabled', True)}"
+    ),
     "set_brightness": lambda args: f"Brightness set to {args.get('level', '50%')}",
     "get_power_profile": lambda args: "Current profile: balanced",
     "set_power_profile": lambda args: f"Profile set to {args.get('profile', 'balanced')}",
@@ -64,9 +80,9 @@ DEFAULT_MCP_RESPONSES = {
     "open_file": lambda args: f"Opened {args.get('path', 'file')}",
     "search_files": lambda args: json.dumps({"count": 0, "results": []}),
     "cleanup_screenshots": lambda args: "Removed 3 screenshots",
-    "list_workspaces": lambda args: json.dumps([
-        {"index": 0, "active": True}, {"index": 1, "active": False}
-    ]),
+    "list_workspaces": lambda args: json.dumps(
+        [{"index": 0, "active": True}, {"index": 1, "active": False}]
+    ),
     "activate_workspace": lambda args: "OK",
     "pick_color": lambda args: json.dumps({"r": 255, "g": 0, "b": 0}),
     "set_wallpaper": lambda args: "Wallpaper set",
@@ -93,7 +109,7 @@ class MockMCPClient:
         if tool_name in DEFAULT_MCP_RESPONSES:
             resp = DEFAULT_MCP_RESPONSES[tool_name]
             return resp(arguments) if callable(resp) else resp
-        return '{}'
+        return "{}"
 
     def _update_window_state(self, tool_name, arguments):
         wid = arguments.get("window_id")
@@ -114,7 +130,7 @@ class MockMCPClient:
             win["maximized"] = False
         elif tool_name == "focus_window":
             for w in self.windows:
-                w["focused"] = (w["id"] == wid)
+                w["focused"] = w["id"] == wid
 
     def get_calls(self, tool_name=None):
         if tool_name:
@@ -171,21 +187,26 @@ class MockDialogHandler:
         if not self.has_dialog:
             return None
         return {
-            'dialog': {'element': None, 'name': 'Save Changes?',
-                       'role': 'alert', 'app': app_name or 'test-app'},
-            'info': {
-                'title': 'Save Changes?',
-                'message': 'Do you want to save changes?',
-                'buttons': [
-                    {'text': 'Cancel', 'element': None},
-                    {'text': 'Discard', 'element': None},
-                    {'text': 'Save', 'element': None},
-                ]
-            }
+            "dialog": {
+                "element": None,
+                "name": "Save Changes?",
+                "role": "alert",
+                "app": app_name or "test-app",
+            },
+            "info": {
+                "title": "Save Changes?",
+                "message": "Do you want to save changes?",
+                "buttons": [
+                    {"text": "Cancel", "element": None},
+                    {"text": "Discard", "element": None},
+                    {"text": "Save", "element": None},
+                ],
+            },
         }
 
-    def activate_button_by_keyboard(self, dialog_data, button_choice,
-                                    use_fallback=True, key_callback=None):
+    def activate_button_by_keyboard(
+        self, dialog_data, button_choice, use_fallback=True, key_callback=None
+    ):
         return True
 
     def verify_dialog_closed(self, dialog_data, timeout=2.0):
@@ -213,8 +234,13 @@ TEST_APP_NAME_MAP = {
 }
 
 TEST_APP_NAMES_ONLY = {
-    "firefox", "mozilla firefox", "text editor",
-    "terminal", "files", "nautilus", "calculator",
+    "firefox",
+    "mozilla firefox",
+    "text editor",
+    "terminal",
+    "files",
+    "nautilus",
+    "calculator",
 }
 
 TEST_APP_FRIENDLY_NAMES = {
@@ -230,10 +256,11 @@ TEST_APP_FRIENDLY_NAMES = {
 # Behave hooks
 # ---------------------------------------------------------------------------
 
+
 def before_all(context):
     import app_index
-    import commands
     import command_matcher
+    import commands
 
     context.embedding_model = app_index.embedding_model
 
@@ -256,8 +283,7 @@ def before_all(context):
         return app_index.get_friendly_app_name(wm_class)
 
     def mock_get_installed_apps():
-        return {'count': 5, 'samples': ['Firefox', 'Text Editor', 'Files'],
-                'categorized': {}}
+        return {"count": 5, "samples": ["Firefox", "Text Editor", "Files"], "categorized": {}}
 
     def mock_check_health(auto_enable=True):
         return (True, "Automation is healthy")

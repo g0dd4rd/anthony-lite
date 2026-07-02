@@ -1,0 +1,22 @@
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "S", "B", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101"]
+"features/*" = ["S101"]
+"commands/__init__.py" = ["F401"]
+"*.py" = ["S603", "S607", "S110", "E722", "S108"]
+"orchestrator.py" = ["E402"]
+"voice_io.py" = ["E402"]
+"tools/discover_a11y.py" = ["E402"]
+"config/prompts.py" = ["E501"]
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true

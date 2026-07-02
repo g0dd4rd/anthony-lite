@@ -7,34 +7,43 @@ Commands are handled by @step decorated handlers (~1ms matching).
 LLM is only used for conversation mode and vision.
 """
 
-import os
-import sys
-
-import requests
-import shutil, subprocess
+import argparse
 import asyncio
-import json
+import os
+import subprocess
+import sys
 import threading
 import time
-import argparse
 from queue import Queue
 
+import requests
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
+
 from dialog_handler import DialogHandler
 
 # Parse command-line arguments
-parser = argparse.ArgumentParser(description='Voice-Driven Desktop Orchestrator')
-parser.add_argument('--ptt', '--push-to-talk', action='store_true',
-                    help='Enable push-to-talk mode (press ENTER to speak)')
-parser.add_argument('--restart-server', action='store_true',
-                    help='Force restart llama-server even if already running')
-parser.add_argument('--kill-server', action='store_true',
-                    help='Kill llama-server on exit (default: keep running)')
-parser.add_argument('--debug', action='store_true',
-                    help='Enable debug output (LLM prompts, tool calls, reasoning)')
-parser.add_argument('--log-dir', type=str, default=None,
-                    help='Directory for log files (default: ./logs/)')
+parser = argparse.ArgumentParser(description="Voice-Driven Desktop Orchestrator")
+parser.add_argument(
+    "--ptt",
+    "--push-to-talk",
+    action="store_true",
+    help="Enable push-to-talk mode (press ENTER to speak)",
+)
+parser.add_argument(
+    "--restart-server",
+    action="store_true",
+    help="Force restart llama-server even if already running",
+)
+parser.add_argument(
+    "--kill-server", action="store_true", help="Kill llama-server on exit (default: keep running)"
+)
+parser.add_argument(
+    "--debug", action="store_true", help="Enable debug output (LLM prompts, tool calls, reasoning)"
+)
+parser.add_argument(
+    "--log-dir", type=str, default=None, help="Directory for log files (default: ./logs/)"
+)
 args = parser.parse_args()
 
 # Global flags
@@ -47,9 +56,11 @@ DEBUG = args.debug
 # FILE LOGGING (always active, independent of --debug)
 # ========================================
 import utils
+
 utils.DEBUG = DEBUG
 utils.setup_logging(args.log_dir)
 from utils import log_and_print
+
 logger = utils.logger
 
 # ========================================
@@ -63,24 +74,24 @@ logger = utils.logger
 # ========================================
 
 # llama-server endpoint
-LLAMA_SERVER_URL = 'http://127.0.0.1:8081/v1/chat/completions'
-LLAMA_SERVER_HEALTH_URL = 'http://127.0.0.1:8081/health'
+LLAMA_SERVER_URL = "http://127.0.0.1:8081/v1/chat/completions"
+LLAMA_SERVER_HEALTH_URL = "http://127.0.0.1:8081/health"
 
 # Model name (for API requests - not used by llama-server but required for API format)
-MODEL_NAME = 'gemma4-e4b-q4km'
+MODEL_NAME = "gemma4-e4b-q4km"
 
 # llama-server configuration
 LLAMA_SERVER_CONFIG = {
-    'binary': os.path.expanduser('~/llama.cpp/build/bin/llama-server'),
-    'model': os.path.expanduser('~/models/gemma4-e4b-q4km.gguf'),
-    'port': 8081,
-    'host': '127.0.0.1',
-    'ctx_size': 4096,
-    'gpu_layers': 99,
-    'device': 'Vulkan0',
-    'threads': 6,
-    'parallel': 1,
-    'mmproj': os.path.expanduser('~/models/mmproj-gemma-4-E4B-it-Q8_0.gguf'),
+    "binary": os.path.expanduser("~/llama.cpp/build/bin/llama-server"),
+    "model": os.path.expanduser("~/models/gemma4-e4b-q4km.gguf"),
+    "port": 8081,
+    "host": "127.0.0.1",
+    "ctx_size": 4096,
+    "gpu_layers": 99,
+    "device": "Vulkan0",
+    "threads": 6,
+    "parallel": 1,
+    "mmproj": os.path.expanduser("~/models/mmproj-gemma-4-E4B-it-Q8_0.gguf"),
 }
 
 # ========================================
@@ -94,25 +105,28 @@ LLAMA_SERVER_CONFIG = {
 # Global variable to track if we started the server
 _server_process = None
 
+
 def check_server_running():
     """Check if llama-server is responding"""
     try:
         response = requests.get(LLAMA_SERVER_HEALTH_URL, timeout=2)
-        return response.status_code == 200 and response.json().get('status') == 'ok'
+        return response.status_code == 200 and response.json().get("status") == "ok"
     except:
         return False
+
 
 def kill_server():
     """Kill any running llama-server processes"""
     try:
         # Find and kill llama-server processes
-        result = subprocess.run(['pgrep', '-f', 'llama-server.*gemma4-e4b-q4km'],
-                              capture_output=True, text=True)
+        result = subprocess.run(
+            ["pgrep", "-f", "llama-server.*gemma4-e4b-q4km"], capture_output=True, text=True
+        )
         if result.stdout.strip():
-            pids = result.stdout.strip().split('\n')
+            pids = result.stdout.strip().split("\n")
             for pid in pids:
                 try:
-                    subprocess.run(['kill', pid], check=False)
+                    subprocess.run(["kill", pid], check=False)
                     log_and_print(f"[SERVER] Killed llama-server process (PID {pid})")
                 except:
                     pass
@@ -120,8 +134,9 @@ def kill_server():
             time.sleep(2)
         return True
     except Exception as e:
-        log_and_print(f"[SERVER] Warning: Could not kill server: {e}", level='warning')
+        log_and_print(f"[SERVER] Warning: Could not kill server: {e}", level="warning")
         return False
+
 
 def start_server():
     """Start llama-server in detached background mode"""
@@ -131,18 +146,28 @@ def start_server():
 
     # Build command
     cmd = [
-        config['binary'],
-        '--model', config['model'],
-        '--ctx-size', str(config['ctx_size']),
-        '--n-gpu-layers', str(config['gpu_layers']),
-        '--device', config['device'],
-        '--port', str(config['port']),
-        '--host', config['host'],
-        '--threads', str(config['threads']),
-        '--parallel', str(config['parallel']),
-        '--cont-batching',
-        '--flash-attn', 'auto',
-        '--mmproj', config['mmproj'],
+        config["binary"],
+        "--model",
+        config["model"],
+        "--ctx-size",
+        str(config["ctx_size"]),
+        "--n-gpu-layers",
+        str(config["gpu_layers"]),
+        "--device",
+        config["device"],
+        "--port",
+        str(config["port"]),
+        "--host",
+        config["host"],
+        "--threads",
+        str(config["threads"]),
+        "--parallel",
+        str(config["parallel"]),
+        "--cont-batching",
+        "--flash-attn",
+        "auto",
+        "--mmproj",
+        config["mmproj"],
     ]
 
     log_and_print(f"[SERVER] Starting llama-server on port {config['port']}...")
@@ -155,27 +180,28 @@ def start_server():
             cmd,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            start_new_session=True  # Detach from parent
+            start_new_session=True,  # Detach from parent
         )
 
         # Wait for server to be ready (max 30 seconds)
         logger.info("[SERVER] Waiting for server to start...")
-        print("[SERVER] Waiting for server to start", end='', flush=True)
-        for i in range(30):
+        print("[SERVER] Waiting for server to start", end="", flush=True)
+        for _i in range(30):
             time.sleep(1)
-            print('.', end='', flush=True)
+            print(".", end="", flush=True)
             if check_server_running():
                 log_and_print(" ✓")
                 log_and_print("[SERVER] llama-server started successfully!")
                 return True
 
         log_and_print(" ✗")
-        log_and_print("[SERVER] ⚠️  Server did not respond within 30 seconds", level='warning')
+        log_and_print("[SERVER] ⚠️  Server did not respond within 30 seconds", level="warning")
         return False
 
     except Exception as e:
-        log_and_print(f"\n[SERVER] ❌ Failed to start server: {e}", level='error')
+        log_and_print(f"\n[SERVER] ❌ Failed to start server: {e}", level="error")
         return False
+
 
 def ensure_server_running(force_restart=False):
     """
@@ -200,6 +226,7 @@ def ensure_server_running(force_restart=False):
     # Start server
     return start_server()
 
+
 # ----------------------------------------
 # llama-server Helper Functions
 # ----------------------------------------
@@ -217,37 +244,37 @@ def call_llama_server(messages, tools=None, temperature=0.0, max_tokens=200):
         Response dict with 'message' containing 'content' and optional 'tool_calls'
     """
     payload = {
-        'messages': messages,
-        'temperature': temperature,
-        'max_tokens': max_tokens,
-        'model': MODEL_NAME  # Required by API format
+        "messages": messages,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+        "model": MODEL_NAME,  # Required by API format
     }
 
     if tools:
-        payload['tools'] = tools
+        payload["tools"] = tools
 
     try:
         response = requests.post(LLAMA_SERVER_URL, json=payload, timeout=120)
         response.raise_for_status()
         result = response.json()
 
-        choice = result['choices'][0]
-        message = choice['message']
+        choice = result["choices"][0]
+        message = choice["message"]
 
         return {
-            'message': {
-                'role': message['role'],
-                'content': message.get('content', ''),
-                'tool_calls': message.get('tool_calls', [])
+            "message": {
+                "role": message["role"],
+                "content": message.get("content", ""),
+                "tool_calls": message.get("tool_calls", []),
             },
-            'eval_count': result.get('usage', {}).get('completion_tokens', 0)
+            "eval_count": result.get("usage", {}).get("completion_tokens", 0),
         }
 
     except requests.exceptions.RequestException as e:
-        log_and_print(f"[ERROR] llama-server request failed: {e}", level='error')
+        log_and_print(f"[ERROR] llama-server request failed: {e}", level="error")
         raise
     except Exception as e:
-        log_and_print(f"[ERROR] llama-server error: {e}", level='error')
+        log_and_print(f"[ERROR] llama-server error: {e}", level="error")
         raise
 
 
@@ -280,11 +307,7 @@ class MCPClient:
 
     async def _connect_and_process(self):
         """Connect to MCP server and process commands"""
-        server_params = StdioServerParameters(
-            command="anthony-mcp",
-            args=[],
-            env=os.environ.copy()
-        )
+        server_params = StdioServerParameters(command="anthony-mcp", args=[], env=os.environ.copy())
 
         async with stdio_client(server_params) as (read, write):
             async with ClientSession(read, write) as session:
@@ -318,6 +341,7 @@ class MCPClient:
             return f"Error: {result}"
         return result
 
+
 mcp_client = MCPClient()
 
 # Initialize dialog handler (auto-checks/enables accessibility)
@@ -325,7 +349,8 @@ log_and_print("[SYSTEM] Initializing dialog handler...")
 dialog_handler = DialogHandler()
 
 # Voice I/O loaded from voice_io.py
-from voice_io import speak, listen_and_transcribe, check_audio_health
+from voice_io import check_audio_health, listen_and_transcribe, speak
+
 
 # ----------------------------------------
 # Health Check & Auto-Recovery
@@ -348,7 +373,12 @@ def check_automation_health(auto_enable=True, retries=3) -> tuple[bool, str]:
                 if attempt < retries - 1:
                     time.sleep(1)
                     continue
-                return False, "GNOME automation extension not responding. Please check if it's installed and enabled in GNOME Extensions."
+                return (
+                    False,
+                    "GNOME automation extension not responding."
+                    " Please check if it's installed and enabled"
+                    " in GNOME Extensions.",
+                )
 
             enabled_result = mcp_client.call_tool("get_enabled", {})
             if "Error" in enabled_result:
@@ -357,7 +387,9 @@ def check_automation_health(auto_enable=True, retries=3) -> tuple[bool, str]:
                     continue
                 return False, f"Could not check automation status: {enabled_result}"
 
-            is_enabled = "enabled" in enabled_result.lower() and "disabled" not in enabled_result.lower()
+            is_enabled = (
+                "enabled" in enabled_result.lower() and "disabled" not in enabled_result.lower()
+            )
 
             if not is_enabled:
                 if auto_enable:
@@ -384,12 +416,15 @@ def check_automation_health(auto_enable=True, retries=3) -> tuple[bool, str]:
 # ========================================
 # APP INDEXING
 # ========================================
-import app_index
-from app_index import (build_app_index, smart_match_window, get_friendly_app_name,
-                       get_installed_gui_apps, detect_app_in_input)
-
 # Conversation mode
 import conversation
+from app_index import (
+    build_app_index,
+    detect_app_in_input,
+    get_friendly_app_name,
+    get_installed_gui_apps,
+    smart_match_window,
+)
 from conversation import handle_conversation
 
 # ========================================
@@ -406,31 +441,46 @@ conversation.init(call_llama_server, debug=DEBUG)
 
 # Initialize command pipeline (step definitions + matcher)
 import commands
-commands.init(mcp_client, speak, listen_and_transcribe,
-              smart_match_window, get_friendly_app_name,
-              dialog_handler, check_automation_health, get_installed_gui_apps)
+
+commands.init(
+    mcp_client,
+    speak,
+    listen_and_transcribe,
+    smart_match_window,
+    get_friendly_app_name,
+    dialog_handler,
+    check_automation_health,
+    get_installed_gui_apps,
+)
 
 import command_matcher
-command_matcher.init(commands.registry, mcp_client, speak,
-                     detect_app_in_input,
-                     check_health_fn=check_automation_health)
+
+command_matcher.init(
+    commands.registry,
+    mcp_client,
+    speak,
+    detect_app_in_input,
+    check_health_fn=check_automation_health,
+)
 
 # Log app discovery
 live_app_list = get_installed_gui_apps()
-log_and_print(f"[SYSTEM] Found {live_app_list['count']} user-visible applications (samples: {', '.join(live_app_list['samples'][:3])})")
-
+samples = ", ".join(live_app_list["samples"][:3])
+log_and_print(
+    f"[SYSTEM] Found {live_app_list['count']} user-visible applications (samples: {samples})"
+)
 
 
 # ----------------------------------------
 # Orchestrator Loop
 # ----------------------------------------
 def run_agent():
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     if PUSH_TO_TALK_MODE:
         print("💬  CONVERSATIONAL Agentic OS - PUSH-TO-TALK MODE")
     else:
         print("💬  CONVERSATIONAL Agentic OS")
-    print("="*60)
+    print("=" * 60)
     print("✅ VAD - unlimited voice input")
     print("✅ Safe close - never loses data without your consent")
     print("✅ Dialog detection - reads options to you")
@@ -458,23 +508,27 @@ def run_agent():
     try:
         _global_disabled = subprocess.run(
             ["gsettings", "get", "org.gnome.shell", "disable-user-extensions"],
-            capture_output=True, text=True, timeout=5)
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
         if "true" in _global_disabled.stdout.lower():
             log_and_print("[SYSTEM] User extensions globally disabled, enabling...")
             subprocess.run(
                 ["gsettings", "set", "org.gnome.shell", "disable-user-extensions", "false"],
-                timeout=5)
+                timeout=5,
+            )
             time.sleep(1)
 
         _ext_check = subprocess.run(
-            ["gnome-extensions", "info", _ext_uuid],
-            capture_output=True, text=True, timeout=5)
+            ["gnome-extensions", "info", _ext_uuid], capture_output=True, text=True, timeout=5
+        )
         if "Enabled: No" in _ext_check.stdout:
             log_and_print("[SYSTEM] Enabling GNOME Shell extension...")
             subprocess.run(["gnome-extensions", "enable", _ext_uuid], timeout=5)
             time.sleep(1)
     except Exception as e:
-        log_and_print(f"[SYSTEM] Could not check/enable extension: {e}", level='warning')
+        log_and_print(f"[SYSTEM] Could not check/enable extension: {e}", level="warning")
 
     log_and_print("[SYSTEM] Starting MCP client...")
     mcp_client.start()
@@ -489,24 +543,28 @@ def run_agent():
     if health_ok:
         log_and_print(f"[SYSTEM] ✓ {health_msg}")
     else:
-        log_and_print(f"[SYSTEM] ⚠️  {health_msg}", level='warning')
-        log_and_print("[SYSTEM] Some features may not work until automation is enabled.", level='warning')
+        log_and_print(f"[SYSTEM] ⚠️  {health_msg}", level="warning")
+        log_and_print(
+            "[SYSTEM] Some features may not work until automation is enabled.", level="warning"
+        )
 
     # State variables
-    current_mode = 'command'  # Start in command mode (explicit switching only)
+    current_mode = "command"  # Start in command mode (explicit switching only)
     conversation_history = []
 
     # Check audio health (mic + output)
     log_and_print("[SYSTEM] Checking audio health...")
     if not check_audio_health():
-        log_and_print("[SYSTEM] ⚠️  Audio issue detected — voice commands may not work", level='warning')
+        log_and_print(
+            "[SYSTEM] ⚠️  Audio issue detected — voice commands may not work", level="warning"
+        )
 
     # Notify user that system is ready
     log_and_print("[SYSTEM] ✓ Voice orchestrator ready")
     if PUSH_TO_TALK_MODE:
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("🎤 PUSH-TO-TALK MODE ACTIVE")
-        print("="*60)
+        print("=" * 60)
         print("Press ENTER to speak a command")
         print("Press Ctrl+C to exit\n")
     else:
@@ -532,26 +590,30 @@ def run_agent():
             # Start timing from when user input is captured
             response_start_time = time.time()
 
-            user_input_lower = user_input.lower().rstrip('.!?,;')
+            user_input_lower = user_input.lower().rstrip(".!?,;")
 
             # Check for explicit mode switching (these don't need timing - just mode control)
-            if 'switch to command mode' in user_input_lower or 'command mode' in user_input_lower:
-                current_mode = 'command'
+            if "switch to command mode" in user_input_lower or "command mode" in user_input_lower:
+                current_mode = "command"
                 speak("Command mode. Ready for desktop commands.")
-                log_and_print(f"[MODE] 🔧 Command mode")
+                log_and_print("[MODE] 🔧 Command mode")
                 continue
 
-            if 'switch to chat mode' in user_input_lower or 'chat mode' in user_input_lower or 'conversation mode' in user_input_lower:
-                current_mode = 'conversation'
+            if (
+                "switch to chat mode" in user_input_lower
+                or "chat mode" in user_input_lower
+                or "conversation mode" in user_input_lower
+            ):
+                current_mode = "conversation"
                 speak("Chat mode activated. Ask me anything!")
-                log_and_print(f"[MODE] 💬 Conversation mode")
+                log_and_print("[MODE] 💬 Conversation mode")
                 continue
 
             # Check for history management
-            if 'clear history' in user_input_lower or 'new topic' in user_input_lower:
+            if "clear history" in user_input_lower or "new topic" in user_input_lower:
                 conversation_history = []
                 speak("Conversation history cleared.")
-                log_and_print(f"[CHAT] 🗑️  History cleared")
+                log_and_print("[CHAT] 🗑️  History cleared")
                 continue
 
             # Use current mode (no automatic detection)
@@ -560,17 +622,17 @@ def run_agent():
             logger.info(f"[INTENT] input={user_input!r} mode={intent_type}")
 
             # Route to appropriate handler
-            if intent_type == 'command':
-              try:
-                log_and_print(f"[COMMAND] Processing: {user_input}")
-                result = command_matcher.execute(user_input)
-                if result is None:
-                    speak("I don't recognize that command. Say help for available commands.")
-                elif result:
-                    speak(result)
-              except Exception as e:
-                log_and_print(f"[ERROR] Command failed: {e}", level='error')
-                speak("Sorry, that command failed.")
+            if intent_type == "command":
+                try:
+                    log_and_print(f"[COMMAND] Processing: {user_input}")
+                    result = command_matcher.execute(user_input)
+                    if result is None:
+                        speak("I don't recognize that command. Say help for available commands.")
+                    elif result:
+                        speak(result)
+                except Exception as e:
+                    log_and_print(f"[ERROR] Command failed: {e}", level="error")
+                    speak("Sorry, that command failed.")
 
             else:  # intent_type == 'conversation'
                 # CONVERSATION MODE - chat with Gemma
@@ -597,7 +659,10 @@ def run_agent():
             kill_server()
         else:
             log_and_print("[SYSTEM] Note: llama-server is still running on port 8081")
-            log_and_print("[SYSTEM] Reuse it on next run for faster startup, or kill with --kill-server flag")
+            log_and_print(
+                "[SYSTEM] Reuse it on next run for faster startup, or kill with --kill-server flag"
+            )
+
 
 if __name__ == "__main__":
     try:
