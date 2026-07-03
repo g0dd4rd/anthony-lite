@@ -64,35 +64,72 @@ from utils import log_and_print
 logger = utils.logger
 
 # ========================================
-# 🎯 MODEL CONFIGURATION - LLAMA.CPP SERVER
-# ========================================
-# Using llama-server with Vulkan GPU acceleration (Intel Arc)
-#
-# Model: Gemma 4 E4B (8B parameters, Q4_K_M quantized, 5GB)
-# Vision: Enabled via mmproj (multimodal projector)
-# API: OpenAI-compatible HTTP endpoint
+# MODEL CONFIGURATION - LLAMA.CPP SERVER
 # ========================================
 
-# llama-server endpoint
 LLAMA_SERVER_URL = "http://127.0.0.1:8081/v1/chat/completions"
 LLAMA_SERVER_HEALTH_URL = "http://127.0.0.1:8081/health"
+MODEL_NAME = "gemma4"
 
-# Model name (for API requests - not used by llama-server but required for API format)
-MODEL_NAME = "gemma4-e4b-q4km"
 
-# llama-server configuration
+def _detect_vulkan():
+    """Return True if a real Vulkan GPU is present (not software renderer)."""
+    try:
+        r = subprocess.run(["vulkaninfo", "--summary"], capture_output=True, text=True, timeout=5)
+        has_device = "deviceName" in r.stdout
+        is_software = "PHYSICAL_DEVICE_TYPE_CPU" in r.stdout
+        return has_device and not is_software
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return False
+
+
+def _find_model(has_gpu):
+    """Find the best available model + mmproj pair under ~/models/.
+
+    Prefers smaller quants on CPU for speed, larger on GPU for quality.
+    """
+    models_dir = os.path.expanduser("~/models")
+    if has_gpu:
+        candidates = [
+            ("gemma4-e2b-q8.gguf", "mmproj-gemma4-e2b-bf16.gguf"),
+            ("gemma-4-E2B-it-Q8_0.gguf", "mmproj-BF16.gguf"),
+            ("gemma4-e2b-q4km.gguf", "mmproj-gemma4-e2b-bf16.gguf"),
+            ("gemma4-e4b-q4km.gguf", "mmproj-gemma-4-E4B-it-Q8_0.gguf"),
+        ]
+    else:
+        candidates = [
+            ("gemma4-e2b-q4km.gguf", "mmproj-gemma4-e2b-bf16.gguf"),
+            ("gemma4-e4b-q4km.gguf", "mmproj-gemma-4-E4B-it-Q8_0.gguf"),
+            ("gemma4-e2b-q8.gguf", "mmproj-gemma4-e2b-bf16.gguf"),
+            ("gemma-4-E2B-it-Q8_0.gguf", "mmproj-BF16.gguf"),
+        ]
+    for model, mmproj in candidates:
+        model_path = os.path.join(models_dir, model)
+        mmproj_path = os.path.join(models_dir, mmproj)
+        if os.path.isfile(model_path) and os.path.isfile(mmproj_path):
+            return model_path, mmproj_path
+    return (
+        os.path.join(models_dir, candidates[0][0]),
+        os.path.join(models_dir, candidates[0][1]),
+    )
+
+
+_has_vulkan = _detect_vulkan()
+_model_path, _mmproj_path = _find_model(_has_vulkan)
+
 LLAMA_SERVER_CONFIG = {
     "binary": os.path.expanduser("~/llama.cpp/build/bin/llama-server"),
-    "model": os.path.expanduser("~/models/gemma4-e4b-q4km.gguf"),
+    "model": _model_path,
     "port": 8081,
     "host": "127.0.0.1",
     "ctx_size": 4096,
-    "gpu_layers": 99,
-    "device": "Vulkan0",
-    "threads": 6,
+    "gpu_layers": 99 if _has_vulkan else 0,
+    "threads": os.cpu_count() or 4,
     "parallel": 1,
-    "mmproj": os.path.expanduser("~/models/mmproj-gemma-4-E4B-it-Q8_0.gguf"),
+    "mmproj": _mmproj_path,
 }
+if _has_vulkan:
+    LLAMA_SERVER_CONFIG["device"] = "Vulkan0"
 
 # ========================================
 # End of configuration
@@ -120,7 +157,7 @@ def kill_server():
     try:
         # Find and kill llama-server processes
         result = subprocess.run(
-            ["pgrep", "-f", "llama-server.*gemma4-e4b-q4km"], capture_output=True, text=True
+            ["pgrep", "-f", "llama-server.*--port"], capture_output=True, text=True
         )
         if result.stdout.strip():
             pids = result.stdout.strip().split("\n")
@@ -153,8 +190,6 @@ def start_server():
         str(config["ctx_size"]),
         "--n-gpu-layers",
         str(config["gpu_layers"]),
-        "--device",
-        config["device"],
         "--port",
         str(config["port"]),
         "--host",
@@ -169,10 +204,13 @@ def start_server():
         "--mmproj",
         config["mmproj"],
     ]
+    if "device" in config:
+        cmd.extend(["--device", config["device"]])
 
+    accel = config.get("device", "CPU")
     log_and_print(f"[SERVER] Starting llama-server on port {config['port']}...")
     log_and_print(f"[SERVER] Model: {config['model']}")
-    log_and_print(f"[SERVER] GPU: {config['device']} ({config['gpu_layers']} layers)")
+    log_and_print(f"[SERVER] Acceleration: {accel} ({config['gpu_layers']} GPU layers)")
 
     try:
         # Start in background, detached from parent process
@@ -247,7 +285,8 @@ def call_llama_server(messages, tools=None, temperature=0.0, max_tokens=200):
         "messages": messages,
         "temperature": temperature,
         "max_tokens": max_tokens,
-        "model": MODEL_NAME,  # Required by API format
+        "model": MODEL_NAME,
+        "chat_template_kwargs": {"enable_thinking": False},
     }
 
     if tools:
@@ -503,32 +542,33 @@ def run_agent():
 
     logger.info(f"[SYSTEM] Banner displayed (PTT={PUSH_TO_TALK_MODE})")
 
-    # Ensure GNOME Shell extension is enabled before starting MCP
-    _ext_uuid = "desktop-automation@anthonymcp.github.io"
-    try:
-        _global_disabled = subprocess.run(
-            ["gsettings", "get", "org.gnome.shell", "disable-user-extensions"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        if "true" in _global_disabled.stdout.lower():
-            log_and_print("[SYSTEM] User extensions globally disabled, enabling...")
-            subprocess.run(
-                ["gsettings", "set", "org.gnome.shell", "disable-user-extensions", "false"],
+    # Ensure GNOME Shell extension is enabled before starting MCP (GNOME only)
+    if "KDE" not in os.environ.get("XDG_CURRENT_DESKTOP", "").upper():
+        _ext_uuid = "desktop-automation@anthonymcp.github.io"
+        try:
+            _global_disabled = subprocess.run(
+                ["gsettings", "get", "org.gnome.shell", "disable-user-extensions"],
+                capture_output=True,
+                text=True,
                 timeout=5,
             )
-            time.sleep(1)
+            if "true" in _global_disabled.stdout.lower():
+                log_and_print("[SYSTEM] User extensions globally disabled, enabling...")
+                subprocess.run(
+                    ["gsettings", "set", "org.gnome.shell", "disable-user-extensions", "false"],
+                    timeout=5,
+                )
+                time.sleep(1)
 
-        _ext_check = subprocess.run(
-            ["gnome-extensions", "info", _ext_uuid], capture_output=True, text=True, timeout=5
-        )
-        if "Enabled: No" in _ext_check.stdout:
-            log_and_print("[SYSTEM] Enabling GNOME Shell extension...")
-            subprocess.run(["gnome-extensions", "enable", _ext_uuid], timeout=5)
-            time.sleep(1)
-    except Exception as e:
-        log_and_print(f"[SYSTEM] Could not check/enable extension: {e}", level="warning")
+            _ext_check = subprocess.run(
+                ["gnome-extensions", "info", _ext_uuid], capture_output=True, text=True, timeout=5
+            )
+            if "Enabled: No" in _ext_check.stdout:
+                log_and_print("[SYSTEM] Enabling GNOME Shell extension...")
+                subprocess.run(["gnome-extensions", "enable", _ext_uuid], timeout=5)
+                time.sleep(1)
+        except Exception as e:
+            log_and_print(f"[SYSTEM] Could not check/enable extension: {e}", level="warning")
 
     log_and_print("[SYSTEM] Starting MCP client...")
     mcp_client.start()
