@@ -4,16 +4,17 @@ Dialog Handler using dogtail for safe user interaction.
 
 Detects dialogs, reads options, gets user input, and executes safely.
 
-REQUIRES: Accessibility (a11y) must be enabled in GNOME
+REQUIRES: Accessibility (AT-SPI) must be enabled.
 """
 
+import os
 import subprocess
 import sys
 import time
 
 
 class DialogHandler:
-    """Handles GNOME dialogs safely with user confirmation"""
+    """Handles desktop dialogs safely with user confirmation"""
 
     def __init__(self):
         self.last_dialog = None
@@ -21,12 +22,18 @@ class DialogHandler:
 
     def _ensure_accessibility_enabled(self):
         """
-        Check if GNOME accessibility is enabled. Enable it if not.
+        Check if accessibility is enabled. Enable it if not.
 
-        Dogtail requires toolkit-accessibility to be enabled.
+        Dogtail requires AT-SPI to be active.
+        KDE Plasma 6 enables AT-SPI by default.
+        GNOME needs toolkit-accessibility via gsettings.
         """
+        is_kde = "KDE" in os.environ.get("XDG_CURRENT_DESKTOP", "").upper()
+        if is_kde:
+            print("[A11Y] ✅ KDE Plasma — AT-SPI enabled by default")
+            return
+
         try:
-            # Check current state
             result = subprocess.run(
                 ["gsettings", "get", "org.gnome.desktop.interface", "toolkit-accessibility"],
                 capture_output=True,
@@ -133,16 +140,17 @@ class DialogHandler:
         info = {"title": dialog_element.name or "Dialog", "message": "", "buttons": []}
 
         try:
-            # Find all labels in the dialog (contains message text)
+            # Find all labels in the dialog (contains message text).
+            # GTK labels use .text, Qt/KDE labels use .name.
             labels = dialog_element.findChildren(
-                lambda x: x.roleName == "label" and x.showing and x.text, recursive=True
+                lambda x: x.roleName == "label" and x.showing and (x.text or x.name),
+                recursive=True,
             )
 
-            # Concatenate label texts to form message
             message_parts = []
             for label in labels:
-                text = label.text.strip()
-                if text and len(text) > 1:  # Skip single-char labels
+                text = (label.text or label.name or "").strip()
+                if text and len(text) > 1:
                     message_parts.append(text)
 
             info["message"] = " ".join(message_parts)
@@ -471,7 +479,7 @@ class DialogHandler:
 if __name__ == "__main__":
     print("Dialog Handler Test")
     print("=" * 60)
-    print("1. Open gnome-text-editor")
+    print("1. Open a text editor (gnome-text-editor, kwrite, kate)")
     print("2. Type some text")
     print("3. Try to close the window (Ctrl+Q or close button)")
     print("4. This script will detect and describe the save dialog\n")

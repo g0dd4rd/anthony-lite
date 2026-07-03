@@ -23,7 +23,7 @@ def _resolve_atspi_name(wm_class):
         return None
     exec_name = app_index.app_name_map.get(wm_class.lower())
     if not exec_name:
-        stripped = wm_class.replace("org.gnome.", "").replace("org.", "")
+        stripped = wm_class.replace("org.gnome.", "").replace("org.kde.", "").replace("org.", "")
         exec_name = app_index.app_name_map.get(stripped.lower())
     if exec_name:
         return APP_A11Y_NAMES.get(exec_name)

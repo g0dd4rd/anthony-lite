@@ -16,6 +16,10 @@ import threading
 import time
 from queue import Queue
 
+# Qt apps need this to register with AT-SPI on KDE
+if "KDE" in os.environ.get("XDG_CURRENT_DESKTOP", "").upper():
+    os.environ.setdefault("QT_LINUX_ACCESSIBILITY_ALWAYS_ON", "1")
+
 import requests
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
