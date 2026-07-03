@@ -57,6 +57,29 @@ check_python_module() {
     fi
 }
 
+# Detect desktop environment
+DESKTOP="${XDG_CURRENT_DESKTOP:-}"
+DESKTOP_UPPER="${DESKTOP^^}"
+
+if [[ "$DESKTOP_UPPER" == *"KDE"* ]]; then
+    DE="kde"
+elif [[ "$DESKTOP_UPPER" == *"GNOME"* ]]; then
+    DE="gnome"
+elif pgrep -x plasmashell &>/dev/null; then
+    DE="kde"
+elif pgrep -x gnome-shell &>/dev/null; then
+    DE="gnome"
+else
+    print_warning "Could not detect desktop environment, assuming GNOME"
+    DE="gnome"
+fi
+
+# Ensure pip is available
+if ! python3 -m pip --version &>/dev/null; then
+    print_step "pip not found, bootstrapping..."
+    python3 -m ensurepip --user
+fi
+
 # Start installation
 print_header "Voice-Driven Orchestrator - Installation"
 
@@ -142,7 +165,7 @@ PYTHON_PACKAGES=(
 
 for pkg in "${PYTHON_PACKAGES[@]}"; do
     print_step "Installing $pkg..."
-    pip install --quiet "$pkg" || {
+    python3 -m pip install --quiet "$pkg" || {
         print_error "Failed to install $pkg"
         exit 1
     }
@@ -195,19 +218,23 @@ else
 fi
 
 # ========================================
-# 5. GNOME Accessibility
+# 5. Accessibility (AT-SPI)
 # ========================================
-print_header "Step 5: Configuring GNOME Accessibility"
+print_header "Step 5: Configuring Accessibility"
 
-ACCESSIBILITY=$(gsettings get org.gnome.desktop.interface toolkit-accessibility)
-
-if [ "$ACCESSIBILITY" != "true" ]; then
-    print_step "Enabling GNOME accessibility..."
-    gsettings set org.gnome.desktop.interface toolkit-accessibility true
-    print_success "Accessibility enabled"
-    print_warning "Note: You may need to log out and back in for full accessibility support"
+if [ "$DE" = "gnome" ]; then
+    ACCESSIBILITY=$(gsettings get org.gnome.desktop.interface toolkit-accessibility)
+    if [ "$ACCESSIBILITY" != "true" ]; then
+        print_step "Enabling GNOME accessibility..."
+        gsettings set org.gnome.desktop.interface toolkit-accessibility true
+        print_success "Accessibility enabled"
+        print_warning "Note: You may need to log out and back in for full accessibility support"
+    else
+        print_success "GNOME accessibility already enabled"
+    fi
 else
-    print_success "Accessibility already enabled"
+    # KDE Plasma 6 enables AT-SPI by default
+    print_success "KDE accessibility (AT-SPI) is enabled by default"
 fi
 
 # ========================================
@@ -219,7 +246,6 @@ VERIFICATION_FAILED=0
 
 print_step "Checking system commands..."
 check_command "python3" || VERIFICATION_FAILED=1
-check_command "pip" || VERIFICATION_FAILED=1
 check_command "git" || VERIFICATION_FAILED=1
 check_command "anthony-mcp" || VERIFICATION_FAILED=1
 check_command "aplay" || VERIFICATION_FAILED=1
@@ -250,12 +276,16 @@ else
 fi
 
 echo ""
-print_step "Checking GNOME accessibility..."
-if gsettings get org.gnome.desktop.interface toolkit-accessibility | grep -q "true"; then
-    print_success "GNOME accessibility enabled"
+print_step "Checking accessibility..."
+if [ "$DE" = "gnome" ]; then
+    if gsettings get org.gnome.desktop.interface toolkit-accessibility | grep -q "true"; then
+        print_success "GNOME accessibility enabled"
+    else
+        print_error "GNOME accessibility not enabled"
+        VERIFICATION_FAILED=1
+    fi
 else
-    print_error "GNOME accessibility not enabled"
-    VERIFICATION_FAILED=1
+    print_success "KDE accessibility (AT-SPI) enabled by default"
 fi
 
 # ========================================

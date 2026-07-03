@@ -17,8 +17,8 @@ def build_app_index():
     """Build index of installed applications via Gio.AppInfo.
 
     Maps natural language terms (Name, GenericName, Keywords) to executable names.
-    org.gnome apps have priority and overwrite conflicts.
-    Automatically covers RPM, flatpak system, and flatpak user apps.
+    Native desktop apps (org.gnome on GNOME, org.kde on KDE) get priority and
+    overwrite conflicts from third-party apps.
     """
     global app_name_map, app_friendly_name, app_names_only
     app_name_map = {}
@@ -29,6 +29,9 @@ def build_app_index():
 
     gi.require_version("Gio", "2.0")
     from gi.repository import Gio
+
+    is_kde = "KDE" in os.environ.get("XDG_CURRENT_DESKTOP", "").upper()
+    priority_prefix = "org.kde." if is_kde else "org.gnome."
 
     apps = []
     for gio_app in Gio.AppInfo.get_all():
@@ -47,16 +50,12 @@ def build_app_index():
                 "keywords": list(gio_app.get_keywords())
                 if hasattr(gio_app, "get_keywords")
                 else [],
-                "is_gnome": desktop_id.startswith("org.gnome."),
+                "is_priority": desktop_id.startswith(priority_prefix),
             }
         )
 
-    for app in apps:
-        if app["is_gnome"]:
-            continue
-
+    def _index_app(app):
         exec_name = app["exec"]
-
         if app["name"]:
             app_friendly_name[exec_name] = app["name"]
         elif app["generic_name"]:
@@ -79,35 +78,15 @@ def build_app_index():
             if keyword:
                 app_name_map[keyword.lower()] = exec_name
 
-    gnome_count = 0
     for app in apps:
-        if not app["is_gnome"]:
-            continue
+        if not app["is_priority"]:
+            _index_app(app)
 
-        gnome_count += 1
-        exec_name = app["exec"]
-
-        if app["name"]:
-            app_friendly_name[exec_name] = app["name"]
-        elif app["generic_name"]:
-            app_friendly_name[exec_name] = app["generic_name"]
-        else:
-            app_friendly_name[exec_name] = exec_name
-
-        app_name_map[exec_name.lower()] = exec_name
-        app_names_only.add(exec_name.lower())
-
-        if app["name"]:
-            app_name_map[app["name"].lower()] = exec_name
-            app_names_only.add(app["name"].lower())
-
-        if app["generic_name"]:
-            app_name_map[app["generic_name"].lower()] = exec_name
-            app_names_only.add(app["generic_name"].lower())
-
-        for keyword in app["keywords"]:
-            if keyword:
-                app_name_map[keyword.lower()] = exec_name
+    priority_count = 0
+    for app in apps:
+        if app["is_priority"]:
+            priority_count += 1
+            _index_app(app)
 
     for alias, target in APP_SHORTCUT_ALIASES.items():
         app_names_only.add(alias)
@@ -115,7 +94,8 @@ def build_app_index():
 
     count = len(app_name_map)
     log_and_print(
-        f"[SYSTEM] Indexed {count} app name mappings ({gnome_count} org.gnome with priority)"
+        f"[SYSTEM] Indexed {count} app name mappings"
+        f" ({priority_count} {priority_prefix[:-1]} with priority)"
     )
 
 
@@ -140,6 +120,8 @@ def smart_match_window(window_name: str, windows: list) -> dict:
         wm_class = w.get("wmClass", "")
         app_name = wm_class.lower()
         app_name = app_name.replace("org.gnome.", "")
+        app_name = app_name.replace("org.kde.", "")
+        app_name = app_name.replace("org.mozilla.", "")
         app_name = app_name.replace("org.", "")
         app_name = app_name.replace("-", "")
         app_name = app_name.replace("_", "")
@@ -165,6 +147,7 @@ def get_friendly_app_name(wm_class: str) -> str:
 
     name = wm_class
     name = name.replace("org.gnome.", "")
+    name = name.replace("org.kde.", "")
     name = name.replace("org.mozilla.", "")
     name = name.replace("org.", "")
     name = name.replace("-", " ")

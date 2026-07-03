@@ -1,5 +1,6 @@
-# Friendly name -> JSON key in app_shortcuts.json (used for shortcut lookup AND routing)
-APP_SHORTCUT_ALIASES = {
+import os
+
+_GNOME_ALIASES = {
     "text editor": "text-editor",
     "gnome text editor": "text-editor",
     "gnome-text-editor": "text-editor",
@@ -14,8 +15,6 @@ APP_SHORTCUT_ALIASES = {
     "gnome videos": "showtime",
     "system monitor": "system-monitor",
     "gnome system monitor": "system-monitor",
-    "chrome": "google-chrome",
-    "google chrome": "google-chrome",
     "audio player": "decibels",
     "music player": "decibels",
     "disk usage": "baobab",
@@ -25,6 +24,28 @@ APP_SHORTCUT_ALIASES = {
     "document scanner": "simple-scan",
     "virtual machines": "boxes",
 }
+
+_KDE_ALIASES = {
+    "text editor": "kwrite",
+    "files": "dolphin",
+    "file manager": "dolphin",
+    "image viewer": "gwenview",
+    "document viewer": "okular",
+    "pdf viewer": "okular",
+    "terminal": "konsole",
+    "system monitor": "plasma-systemmonitor",
+    "screenshot": "spectacle",
+}
+
+_SHARED_ALIASES = {
+    "chrome": "google-chrome",
+    "google chrome": "google-chrome",
+    "web browser": "firefox",
+    "browser": "firefox",
+}
+
+_is_kde = "KDE" in os.environ.get("XDG_CURRENT_DESKTOP", "").upper()
+APP_SHORTCUT_ALIASES = {**_SHARED_ALIASES, **(_KDE_ALIASES if _is_kde else _GNOME_ALIASES)}
 
 
 # exec_name -> AT-SPI accessibility name
