@@ -289,6 +289,46 @@ else
 fi
 
 # ========================================
+# 7. Build llama.cpp
+# ========================================
+print_header "Step 7: Building llama.cpp"
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+LLAMA_SERVER="$HOME/llama.cpp/build/bin/llama-server"
+
+if [ -x "$LLAMA_SERVER" ]; then
+    print_success "llama-server already built: $LLAMA_SERVER"
+    "$LLAMA_SERVER" --version 2>/dev/null || true
+else
+    print_step "Building llama.cpp (auto-detects CUDA / Vulkan / CPU)..."
+    if "$SCRIPT_DIR/build_llama.sh"; then
+        print_success "llama.cpp built successfully"
+    else
+        print_error "llama.cpp build failed"
+        VERIFICATION_FAILED=1
+    fi
+fi
+
+# ========================================
+# 8. LLM Model Check
+# ========================================
+print_header "Step 8: LLM Model Check"
+
+MODELS_DIR="$HOME/models"
+
+if ls "$MODELS_DIR"/*.gguf &>/dev/null 2>&1; then
+    print_success "Model files found in $MODELS_DIR/:"
+    ls -1h "$MODELS_DIR"/*.gguf
+else
+    print_warning "No model files found in $MODELS_DIR/"
+    echo ""
+    echo "Anthony Lite needs a Gemma 4 GGUF model to run."
+    echo "Download one with:"
+    echo -e "  ${GREEN}$SCRIPT_DIR/download_model.sh${NC}        # E2B (~3.4 GB total)"
+    echo -e "  ${GREEN}$SCRIPT_DIR/download_model.sh e4b${NC}    # E4B (~4.9 GB total)"
+fi
+
+# ========================================
 # Final Report
 # ========================================
 print_header "Installation Complete"
@@ -296,11 +336,15 @@ print_header "Installation Complete"
 if [ $VERIFICATION_FAILED -eq 0 ]; then
     print_success "All dependencies installed and verified!"
     echo ""
-    echo "You can now run the orchestrator:"
-    echo -e "  ${GREEN}cd ~/anthony-lite${NC}"
-    echo -e "  ${GREEN}./orchestrator.py${NC}"
+    echo "Next steps:"
+    if ! ls "$MODELS_DIR"/*.gguf &>/dev/null 2>&1; then
+        echo -e "  1. ${GREEN}$SCRIPT_DIR/download_model.sh${NC}    # download LLM model"
+        echo -e "  2. ${GREEN}cd ~/anthony-lite && ./orchestrator.py${NC}"
+    else
+        echo -e "  ${GREEN}cd ~/anthony-lite && ./orchestrator.py${NC}"
+    fi
     echo ""
-    echo "First run will download additional models:"
+    echo "First run will also download:"
     echo "  - Whisper medium.en (~1.5GB)"
     echo "  - Silero VAD (~2MB)"
     echo ""

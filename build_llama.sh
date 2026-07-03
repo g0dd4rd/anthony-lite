@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build llama.cpp from source (auto-detects Vulkan GPU or builds CPU-only)
+# Build llama.cpp from source (auto-detects CUDA / Vulkan GPU or builds CPU-only)
 #
 # Usage:
 #   ./build_llama.sh           # clone + build
@@ -41,18 +41,34 @@ elif [ "$UPDATE" = true ]; then
     git -C "$LLAMA_DIR" pull --ff-only
 fi
 
-# Detect Vulkan
+# Detect GPU: CUDA > Vulkan > CPU
 CMAKE_ARGS=()
-if vulkaninfo --summary 2>&1 | grep -q "deviceName" && ! vulkaninfo --summary 2>&1 | grep -q "PHYSICAL_DEVICE_TYPE_CPU"; then
-    echo "Vulkan GPU detected — building with GPU support"
-    CMAKE_ARGS+=(-DGGML_VULKAN=ON)
-
-    if ! rpm -q vulkan-headers &>/dev/null; then
-        echo "Installing Vulkan development headers..."
-        sudo dnf install -y vulkan-headers vulkan-loader-devel
+if nvidia-smi &>/dev/null && command -v nvcc &>/dev/null; then
+    echo "CUDA GPU detected — building with CUDA support"
+    CMAKE_ARGS+=(-DGGML_CUDA=ON)
+elif nvidia-smi &>/dev/null && ! command -v nvcc &>/dev/null; then
+    echo "NVIDIA GPU detected but CUDA toolkit missing — installing..."
+    sudo dnf install -y cuda-nvcc cuda-cudart-devel libcublas-devel
+    if command -v nvcc &>/dev/null; then
+        echo "CUDA toolkit installed — building with CUDA support"
+        CMAKE_ARGS+=(-DGGML_CUDA=ON)
+    else
+        echo "CUDA toolkit install failed — falling back to Vulkan/CPU"
     fi
-else
-    echo "No Vulkan GPU — building CPU-only"
+fi
+
+if [ ${#CMAKE_ARGS[@]} -eq 0 ]; then
+    if vulkaninfo --summary 2>&1 | grep -q "deviceName" && ! vulkaninfo --summary 2>&1 | grep -q "PHYSICAL_DEVICE_TYPE_CPU"; then
+        echo "Vulkan GPU detected — building with Vulkan support"
+        CMAKE_ARGS+=(-DGGML_VULKAN=ON)
+
+        if ! rpm -q vulkan-headers &>/dev/null; then
+            echo "Installing Vulkan development headers..."
+            sudo dnf install -y vulkan-headers vulkan-loader-devel
+        fi
+    else
+        echo "No GPU detected — building CPU-only"
+    fi
 fi
 
 # Configure + build
