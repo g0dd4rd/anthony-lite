@@ -72,34 +72,44 @@ LLAMA_SERVER_HEALTH_URL = "http://127.0.0.1:8081/health"
 MODEL_NAME = "gemma4"
 
 
-def _detect_vulkan():
-    """Return True if a real Vulkan GPU is present (not software renderer)."""
+def _detect_gpu():
+    """Detect GPU backend: CUDA > Vulkan > None."""
+    try:
+        r = subprocess.run(["nvidia-smi"], capture_output=True, timeout=5)
+        if r.returncode == 0:
+            return "cuda"
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
     try:
         r = subprocess.run(["vulkaninfo", "--summary"], capture_output=True, text=True, timeout=5)
-        has_device = "deviceName" in r.stdout
-        is_software = "PHYSICAL_DEVICE_TYPE_CPU" in r.stdout
-        return has_device and not is_software
+        if "deviceName" in r.stdout and "PHYSICAL_DEVICE_TYPE_CPU" not in r.stdout:
+            return "vulkan"
     except (FileNotFoundError, subprocess.TimeoutExpired):
-        return False
+        pass
+    return None
 
 
-def _find_model(has_gpu):
+def _find_model(gpu_backend):
     """Find the best available model + mmproj pair under ~/models/.
 
     Prefers smaller quants on CPU for speed, larger on GPU for quality.
     """
     models_dir = os.path.expanduser("~/models")
-    if has_gpu:
+    if gpu_backend:
         candidates = [
             ("gemma4-e2b-q8.gguf", "mmproj-gemma4-e2b-bf16.gguf"),
             ("gemma-4-E2B-it-Q8_0.gguf", "mmproj-BF16.gguf"),
             ("gemma4-e2b-q4km.gguf", "mmproj-gemma4-e2b-bf16.gguf"),
+            ("gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf", "mmproj-e2b-bf16.gguf"),
             ("gemma4-e4b-q4km.gguf", "mmproj-gemma-4-E4B-it-Q8_0.gguf"),
+            ("gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf", "mmproj-e4b-bf16.gguf"),
         ]
     else:
         candidates = [
             ("gemma4-e2b-q4km.gguf", "mmproj-gemma4-e2b-bf16.gguf"),
+            ("gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf", "mmproj-e2b-bf16.gguf"),
             ("gemma4-e4b-q4km.gguf", "mmproj-gemma-4-E4B-it-Q8_0.gguf"),
+            ("gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf", "mmproj-e4b-bf16.gguf"),
             ("gemma4-e2b-q8.gguf", "mmproj-gemma4-e2b-bf16.gguf"),
             ("gemma-4-E2B-it-Q8_0.gguf", "mmproj-BF16.gguf"),
         ]
@@ -114,8 +124,8 @@ def _find_model(has_gpu):
     )
 
 
-_has_vulkan = _detect_vulkan()
-_model_path, _mmproj_path = _find_model(_has_vulkan)
+_gpu_backend = _detect_gpu()
+_model_path, _mmproj_path = _find_model(_gpu_backend)
 
 LLAMA_SERVER_CONFIG = {
     "binary": os.path.expanduser("~/llama.cpp/build/bin/llama-server"),
@@ -123,12 +133,14 @@ LLAMA_SERVER_CONFIG = {
     "port": 8081,
     "host": "127.0.0.1",
     "ctx_size": 4096,
-    "gpu_layers": 99 if _has_vulkan else 0,
+    "gpu_layers": 99 if _gpu_backend else 0,
     "threads": os.cpu_count() or 4,
     "parallel": 1,
     "mmproj": _mmproj_path,
 }
-if _has_vulkan:
+if _gpu_backend == "cuda":
+    LLAMA_SERVER_CONFIG["device"] = "CUDA0"
+elif _gpu_backend == "vulkan":
     LLAMA_SERVER_CONFIG["device"] = "Vulkan0"
 
 # ========================================
