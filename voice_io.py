@@ -269,12 +269,14 @@ def listen_and_transcribe():
                                 vad_filter=True,
                                 vad_parameters=dict(min_silence_duration_ms=500),
                                 initial_prompt=(
-                                    "Commands for opening files,"
-                                    " applications, and websites."
-                                    " Files may have spaces in names"
-                                    " like 'bugs and ideas.txt' or"
-                                    " 'practical presentation"
-                                    " advice.txt'."
+                                    "Voice commands for desktop control."
+                                    " Open, close, minimize, maximize, tile, snap."
+                                    " Mute, unmute, volume up, volume down."
+                                    " Brightness, screenshot, describe screen."
+                                    " Workspace, monitor, Bluetooth, Wi-Fi."
+                                    " Click, scroll, type, right click."
+                                    " Firefox, Text Editor, Files, Terminal."
+                                    " Switch to chat mode, switch to command mode."
                                 ),
                             )
                             whisper_elapsed = time.time() - whisper_start
