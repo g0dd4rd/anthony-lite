@@ -462,14 +462,18 @@ def _tile_window(app_name, position):
         mon_result = _mcp_client.call_tool("get_monitors", {})
         monitors = json.loads(mon_result)
         primary = next((m for m in monitors if m.get("primary")), monitors[0])
-        scr_w = primary["width"]
-        scr_h = primary["height"]
+        scr_w = primary.get("workAreaWidth", primary["width"])
+        scr_h = primary.get("workAreaHeight", primary["height"])
+        offset_x = primary.get("workAreaX", 0)
+        offset_y = primary.get("workAreaY", 0)
     except Exception:
         scr_w, scr_h = 1920, 1080
+        offset_x, offset_y = 0, 0
 
     tx, ty, tw, th = calc_fn(scr_w, scr_h)
     _mcp_client.call_tool(
-        "move_resize_window", {"window_id": window_id, "x": tx, "y": ty, "width": tw, "height": th}
+        "move_resize_window",
+        {"window_id": window_id, "x": tx + offset_x, "y": ty + offset_y, "width": tw, "height": th},
     )
     return f"Moved {friendly} to the {position}"
 
@@ -478,8 +482,10 @@ def _tile_window(app_name, position):
     "tile {app} to the {position}",
     "snap {app} to the {position}",
     "put {app} on the {position}",
+    "move {app} to the {position}",
     "snap {app} {position}",
     "tile {app} {position}",
+    "move {app} {position}",
     category="window",
     help_text="Tile a window to a screen position",
 )
@@ -490,6 +496,8 @@ def handle_tile_app(context, app, position):
 @step(
     "tile {position}",
     "snap {position}",
+    "move to the {position}",
+    "move to {position}",
     category="window",
     help_text="Tile the focused window to a position",
 )

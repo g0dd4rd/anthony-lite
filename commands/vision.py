@@ -247,6 +247,8 @@ def handle_pick_color(context, x, y):
     "monitor info",
     "how many monitors",
     "which monitors",
+    "what monitors are connected",
+    "list monitors",
     category="vision",
     help_text="Show monitor configuration",
 )

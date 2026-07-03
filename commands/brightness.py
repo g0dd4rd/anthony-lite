@@ -92,6 +92,7 @@ def handle_kbd_brightness_off(context):
 
 @step(
     "what power mode",
+    "what power mode am I on",
     "current power mode",
     "check power mode",
     "what power profile",
