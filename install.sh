@@ -289,12 +289,32 @@ else
 fi
 
 # ========================================
-# 7. LLM Model Check
+# 7. Build llama.cpp
 # ========================================
-print_header "Step 7: LLM Model Check"
+print_header "Step 7: Building llama.cpp"
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+LLAMA_SERVER="$HOME/llama.cpp/build/bin/llama-server"
+
+if [ -x "$LLAMA_SERVER" ]; then
+    print_success "llama-server already built: $LLAMA_SERVER"
+    "$LLAMA_SERVER" --version 2>/dev/null || true
+else
+    print_step "Building llama.cpp (auto-detects CUDA / Vulkan / CPU)..."
+    if "$SCRIPT_DIR/build_llama.sh"; then
+        print_success "llama.cpp built successfully"
+    else
+        print_error "llama.cpp build failed"
+        VERIFICATION_FAILED=1
+    fi
+fi
+
+# ========================================
+# 8. LLM Model Check
+# ========================================
+print_header "Step 8: LLM Model Check"
 
 MODELS_DIR="$HOME/models"
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 if ls "$MODELS_DIR"/*.gguf &>/dev/null 2>&1; then
     print_success "Model files found in $MODELS_DIR/:"
@@ -319,11 +339,9 @@ if [ $VERIFICATION_FAILED -eq 0 ]; then
     echo "Next steps:"
     if ! ls "$MODELS_DIR"/*.gguf &>/dev/null 2>&1; then
         echo -e "  1. ${GREEN}$SCRIPT_DIR/download_model.sh${NC}    # download LLM model"
-        echo -e "  2. ${GREEN}$SCRIPT_DIR/build_llama.sh${NC}       # build llama.cpp"
-        echo -e "  3. ${GREEN}cd ~/anthony-lite && ./orchestrator.py${NC}"
+        echo -e "  2. ${GREEN}cd ~/anthony-lite && ./orchestrator.py${NC}"
     else
-        echo -e "  ${GREEN}cd ~/anthony-lite${NC}"
-        echo -e "  ${GREEN}./orchestrator.py${NC}"
+        echo -e "  ${GREEN}cd ~/anthony-lite && ./orchestrator.py${NC}"
     fi
     echo ""
     echo "First run will also download:"
