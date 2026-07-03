@@ -73,11 +73,17 @@ MODEL_NAME = "gemma4"
 
 
 def _detect_gpu():
-    """Detect GPU backend: CUDA > Vulkan > None."""
+    """Detect GPU backend: CUDA > ROCm > Vulkan > None."""
     try:
         r = subprocess.run(["nvidia-smi"], capture_output=True, timeout=5)
         if r.returncode == 0:
             return "cuda"
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+    try:
+        r = subprocess.run(["rocminfo"], capture_output=True, text=True, timeout=5)
+        if r.returncode == 0 and "gfx" in r.stdout:
+            return "rocm"
     except (FileNotFoundError, subprocess.TimeoutExpired):
         pass
     try:
@@ -140,6 +146,8 @@ LLAMA_SERVER_CONFIG = {
 }
 if _gpu_backend == "cuda":
     LLAMA_SERVER_CONFIG["device"] = "CUDA0"
+elif _gpu_backend == "rocm":
+    LLAMA_SERVER_CONFIG["device"] = "HIP0"
 elif _gpu_backend == "vulkan":
     LLAMA_SERVER_CONFIG["device"] = "Vulkan0"
 
