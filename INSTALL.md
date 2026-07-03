@@ -12,10 +12,12 @@ cd ~/anthony-lite
 The script will:
 1. Install system packages (ALSA, PortAudio, PipeWire utils, playerctl)
 2. Install Python packages (PyAudio, Whisper, Piper, MCP, etc.)
-3. Install Anthony MCP server (GNOME extension + MCP bridge)
+3. Install Anthony MCP server (GNOME/KDE desktop automation)
 4. Download Piper voice model
-5. Enable GNOME accessibility (required for dialog detection)
-6. Verify all dependencies
+5. Enable accessibility (required for dialog detection)
+6. Build llama.cpp (auto-detects CUDA / Vulkan / CPU)
+7. Check for LLM model files
+8. Verify all dependencies
 
 ## What Gets Installed
 
@@ -39,15 +41,18 @@ The script will:
 - `dogtail` - GNOME accessibility / dialog handling
 
 ### Anthony MCP
-- GNOME Shell extension for window/input/settings/media control
+- GNOME Shell extension / KDE KWin scripting for window/input/settings/media control
 - Python MCP server wrapping the D-Bus interface
 - System control tools (battery, brightness, power profile, lock, power actions)
+
+### LLM Inference
+- **llama.cpp** - Built from source with CUDA, Vulkan, or CPU backend
+- **Gemma 4 QAT** - Download with `./download_model.sh` from Unsloth (no login required)
 
 ### Models
 - **Piper en_US-lessac-medium** - Neural voice (~60MB, downloaded by install script)
 - **Whisper medium.en** - STT (~1.5GB, auto-downloads on first run)
 - **Silero VAD** - Voice activity detection (~2MB, auto-downloads on first run)
-You also need a Gemma 4 model running via llama-server (not installed by this script). See `start_llama_server.sh`.
 
 ## Manual Installation
 
@@ -81,8 +86,13 @@ python3 -m piper.download_voices --download-dir . en_US-lessac-medium
 gsettings set org.gnome.desktop.interface toolkit-accessibility true
 ```
 
-### 6. llama-server
-Build [llama.cpp](https://github.com/ggerganov/llama.cpp) with Vulkan backend and download a Gemma 4 GGUF model. See `start_llama_server.sh` for the launch command.
+### 6. llama.cpp + LLM Model
+```bash
+cd ~/anthony-lite
+./build_llama.sh        # auto-detects CUDA / Vulkan / CPU
+./download_model.sh     # downloads Gemma 4 E2B QAT from Unsloth
+./download_model.sh e4b # or E4B for higher quality (larger)
+```
 
 ## Verification
 
@@ -137,27 +147,16 @@ gsettings set org.gnome.desktop.interface toolkit-accessibility true
 ## System Requirements
 
 - **OS**: Fedora (or compatible RPM-based distro)
-- **RAM**: 16GB+ recommended
-- **GPU**: Vulkan-capable (tested on Intel Arc A770M)
-- **Disk**: ~5GB free (for voice models)
-- **Audio**: Working microphone and speakers
-- **Desktop**: GNOME with Wayland or X11
+- **RAM**: 16GB+ recommended (32GB for comfortable CPU-only inference)
+- **GPU**: CUDA or Vulkan-capable (tested on Intel Arc A770M, NVIDIA GPUs); CPU-only also works
+- **Disk**: ~10GB free (llama.cpp, LLM model, voice models)
+- **Audio**: Bluetooth headset recommended for best voice recognition accuracy and privacy
+- **Desktop**: GNOME or KDE Plasma (Wayland or X11)
 
 ## Uninstallation
 
 ```bash
-# Python packages
-pip uninstall sounddevice pyaudio faster-whisper piper-tts mcp torch numpy \
-    requests webcolors dogtail parse
-
-# MCP server
-pip uninstall anthony-mcp
-
-# System packages (optional)
-sudo dnf remove portaudio-devel python3-devel
-
-# Models and caches
-rm -rf ~/anthony-lite/en_US-lessac-medium.onnx*
-rm -rf ~/.cache/huggingface
-rm -rf ~/.cache/torch
+cd ~/anthony-lite
+./uninstall.sh       # interactive — asks before each step
+./uninstall.sh --all # remove everything without prompting
 ```
