@@ -54,7 +54,9 @@ class MCPClient:
             async with ClientSession(read, write) as session:
                 await session.initialize()
                 self.session = session
-                print(f"[MCP] Connected to {self.server_command}")
+                from utils import log_and_print
+
+                log_and_print(f"[MCP] Connected to {self.server_command}")
 
                 while True:
                     if not self.command_queue.empty():
