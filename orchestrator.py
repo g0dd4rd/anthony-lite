@@ -108,20 +108,24 @@ def _find_model(gpu_backend):
     if gpu_backend:
         candidates = [
             ("gemma4-e2b-q8.gguf", "mmproj-gemma4-e2b-bf16.gguf"),
-            ("gemma-4-E2B-it-Q8_0.gguf", "mmproj-BF16.gguf"),
+            ("gemma-4-E2B-it-Q8_0.gguf", "mmproj-e2b-bf16.gguf"),
             ("gemma4-e2b-q4km.gguf", "mmproj-gemma4-e2b-bf16.gguf"),
+            ("gemma-4-E2B-it-Q4_K_M.gguf", "mmproj-e2b-bf16.gguf"),
             ("gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf", "mmproj-e2b-bf16.gguf"),
             ("gemma4-e4b-q4km.gguf", "mmproj-gemma-4-E4B-it-Q8_0.gguf"),
+            ("gemma-4-E4B-it-Q4_K_M.gguf", "mmproj-e4b-bf16.gguf"),
             ("gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf", "mmproj-e4b-bf16.gguf"),
         ]
     else:
         candidates = [
             ("gemma4-e2b-q4km.gguf", "mmproj-gemma4-e2b-bf16.gguf"),
             ("gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf", "mmproj-e2b-bf16.gguf"),
+            ("gemma-4-E2B-it-Q4_K_M.gguf", "mmproj-e2b-bf16.gguf"),
             ("gemma4-e4b-q4km.gguf", "mmproj-gemma-4-E4B-it-Q8_0.gguf"),
             ("gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf", "mmproj-e4b-bf16.gguf"),
+            ("gemma-4-E4B-it-Q4_K_M.gguf", "mmproj-e4b-bf16.gguf"),
             ("gemma4-e2b-q8.gguf", "mmproj-gemma4-e2b-bf16.gguf"),
-            ("gemma-4-E2B-it-Q8_0.gguf", "mmproj-BF16.gguf"),
+            ("gemma-4-E2B-it-Q8_0.gguf", "mmproj-e2b-bf16.gguf"),
         ]
     for model, mmproj in candidates:
         model_path = os.path.join(models_dir, model)
