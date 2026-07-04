@@ -106,9 +106,7 @@ class DialogHandler:
 
                 try:
                     alert_elements = app.findChildren(
-                        lambda x: x.roleName in ["alert", "dialog"] and x.showing,
-                        recursive=True,
-                        showingOnly=True,
+                        lambda x: x.roleName in ["alert", "dialog"] and x.showing
                     )
 
                     for elem in alert_elements:
@@ -143,8 +141,7 @@ class DialogHandler:
             # Find all labels in the dialog (contains message text).
             # GTK labels use .text, Qt/KDE labels use .name.
             labels = dialog_element.findChildren(
-                lambda x: x.roleName == "label" and x.showing and (x.text or x.name),
-                recursive=True,
+                lambda x: x.roleName == "label" and x.showing and (x.text or x.name)
             )
 
             message_parts = []
@@ -156,10 +153,7 @@ class DialogHandler:
             info["message"] = " ".join(message_parts)
 
             # Find all buttons (roleName is 'button', not 'push button')
-            buttons = dialog_element.findChildren(
-                lambda x: x.roleName == "button",  # Changed from 'push button'
-                recursive=True,
-            )
+            buttons = dialog_element.findChildren(lambda x: x.roleName == "button")
 
             for btn in buttons:
                 if btn.name:

@@ -500,7 +500,7 @@ if not ensure_server_running(force_restart=RESTART_SERVER):
     sys.exit(1)
 
 # Initialize conversation module
-conversation.init(call_llama_server, debug=DEBUG)
+conversation.init(call_llama_server)
 
 # Initialize command pipeline (step definitions + matcher)
 import commands
