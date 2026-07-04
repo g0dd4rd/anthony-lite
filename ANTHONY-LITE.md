@@ -104,7 +104,9 @@ Each module registers `@step` decorated handlers with patterns, category, and he
 | File | Purpose |
 |---|---|
 | `gnome_shortcuts.py` | Reads keyboard shortcuts from gsettings schemas at runtime |
-| `app_shortcuts.json` | Curated per-app shortcut database |
+| `shared.json` | Curated shortcuts for cross-DE apps (Firefox, Chrome) |
+| `gnome.json` | Curated shortcuts for GNOME apps |
+| `kde.json` | Curated shortcuts for KDE apps |
 
 ### features/ — BDD Tests
 

@@ -55,6 +55,7 @@ def _preprocess(text):
 
 def _split_segments(text):
     text_clean = text.strip().rstrip(".!?,;")
+    text_clean = re.sub(r"^(\w+),\s*", r"\1 ", text_clean)
 
     entry, params = _registry.match(text_clean)
     if entry and entry["name"] in ("handle_type_text",):
@@ -123,6 +124,8 @@ def execute(user_input, context=None):
 
     for _i, segment in enumerate(segments):
         segment = _resolve_pronouns(segment, context.get("last_app"))
+        # Whisper inserts commas after command verbs ("Type, hello") — strip them
+        segment = re.sub(r"^(\w+),\s*", r"\1 ", segment)
 
         entry, params = None, {}
         segment_lower = segment.lower()
