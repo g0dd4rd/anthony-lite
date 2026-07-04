@@ -9,14 +9,17 @@ from utils import log_and_print
 _shortcuts_dir = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "shortcuts"
 )
-_json_path = os.path.join(_shortcuts_dir, "app_shortcuts.json")
+_is_kde = "KDE" in os.environ.get("XDG_CURRENT_DESKTOP", "").upper()
+_de_file = "kde.json" if _is_kde else "gnome.json"
 
-try:
-    with open(_json_path) as _f:
-        _shortcuts_data = json.load(_f)
-except Exception as _e:
-    log_and_print(f"[SHORTCUTS] Failed to load app_shortcuts.json: {_e}", level="error")
-    _shortcuts_data = {}
+_shortcuts_data = {}
+for _fname in ("shared.json", _de_file):
+    _fpath = os.path.join(_shortcuts_dir, _fname)
+    try:
+        with open(_fpath) as _f:
+            _shortcuts_data.update(json.load(_f))
+    except Exception as _e:
+        log_and_print(f"[SHORTCUTS] Failed to load {_fname}: {_e}", level="error")
 
 
 def _get_focused_app_key():
@@ -34,7 +37,7 @@ def _get_focused_app_key():
         friendly_name = _get_friendly_app_name(wm_class)
 
         candidates = [wm_class.lower()]
-        for prefix in ("org.gnome.", "org.mozilla.", "org."):
+        for prefix in ("org.gnome.", "org.kde.", "org.mozilla.", "org."):
             if wm_class.lower().startswith(prefix):
                 candidates.append(wm_class.lower()[len(prefix) :])
         for c in list(candidates):

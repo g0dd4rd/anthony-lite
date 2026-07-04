@@ -4,16 +4,19 @@ Dialog Handler using dogtail for safe user interaction.
 
 Detects dialogs, reads options, gets user input, and executes safely.
 
-REQUIRES: Accessibility (a11y) must be enabled in GNOME
+REQUIRES: Accessibility (AT-SPI) must be enabled.
 """
 
+import os
 import subprocess
 import sys
 import time
 
+from utils import log_and_print
+
 
 class DialogHandler:
-    """Handles GNOME dialogs safely with user confirmation"""
+    """Handles desktop dialogs safely with user confirmation"""
 
     def __init__(self):
         self.last_dialog = None
@@ -21,12 +24,18 @@ class DialogHandler:
 
     def _ensure_accessibility_enabled(self):
         """
-        Check if GNOME accessibility is enabled. Enable it if not.
+        Check if accessibility is enabled. Enable it if not.
 
-        Dogtail requires toolkit-accessibility to be enabled.
+        Dogtail requires AT-SPI to be active.
+        KDE Plasma 6 enables AT-SPI by default.
+        GNOME needs toolkit-accessibility via gsettings.
         """
+        is_kde = "KDE" in os.environ.get("XDG_CURRENT_DESKTOP", "").upper()
+        if is_kde:
+            log_and_print("[A11Y] ✅ KDE Plasma — AT-SPI enabled by default")
+            return
+
         try:
-            # Check current state
             result = subprocess.run(
                 ["gsettings", "get", "org.gnome.desktop.interface", "toolkit-accessibility"],
                 capture_output=True,
@@ -37,7 +46,7 @@ class DialogHandler:
             is_enabled = result.stdout.strip() == "true"
 
             if not is_enabled:
-                print("[A11Y] ⚠️  Accessibility not enabled. Enabling now...")
+                log_and_print("[A11Y] ⚠️  Accessibility not enabled. Enabling now...")
                 subprocess.run(
                     [
                         "gsettings",
@@ -48,15 +57,17 @@ class DialogHandler:
                     ],
                     check=True,
                 )
-                print("[A11Y] ✅ Accessibility enabled.")
-                print("[A11Y] ⚠️  NOTE: You may need to restart applications for full a11y support.")
-                print("[A11Y]      For best results, log out and log back in.")
+                log_and_print("[A11Y] ✅ Accessibility enabled.")
+                log_and_print(
+                    "[A11Y] ⚠️  NOTE: You may need to restart applications for full a11y support."
+                )
+                log_and_print("[A11Y]      For best results, log out and log back in.")
             else:
-                print("[A11Y] ✅ Accessibility already enabled")
+                log_and_print("[A11Y] ✅ Accessibility already enabled")
 
         except Exception as e:
-            print(f"[A11Y] ⚠️  Could not check/enable accessibility: {e}")
-            print(
+            log_and_print(f"[A11Y] ⚠️  Could not check/enable accessibility: {e}")
+            log_and_print(
                 "[A11Y]      Run manually: gsettings set"
                 " org.gnome.desktop.interface"
                 " toolkit-accessibility true"
@@ -70,8 +81,8 @@ class DialogHandler:
 
             return root, SearchError, doDelay
         except ImportError as e:
-            print(f"[A11Y] ❌ Error importing dogtail: {e}")
-            print("[A11Y]      Install with: pip install dogtail")
+            log_and_print(f"[A11Y] ❌ Error importing dogtail: {e}")
+            log_and_print("[A11Y]      Install with: pip install dogtail")
             sys.exit(1)
 
     def find_dialogs(self, app_name=None) -> list[dict]:
@@ -99,9 +110,7 @@ class DialogHandler:
 
                 try:
                     alert_elements = app.findChildren(
-                        lambda x: x.roleName in ["alert", "dialog"] and x.showing,
-                        recursive=True,
-                        showingOnly=True,
+                        lambda x: x.roleName in ["alert", "dialog"] and x.showing
                     )
 
                     for elem in alert_elements:
@@ -117,7 +126,7 @@ class DialogHandler:
                     continue
 
         except Exception as e:
-            print(f"[Dialog] Error finding dialogs: {e}")
+            log_and_print(f"[Dialog] Error finding dialogs: {e}")
 
         return dialogs
 
@@ -133,32 +142,29 @@ class DialogHandler:
         info = {"title": dialog_element.name or "Dialog", "message": "", "buttons": []}
 
         try:
-            # Find all labels in the dialog (contains message text)
+            # Find all labels in the dialog (contains message text).
+            # GTK labels use .text, Qt/KDE labels use .name.
             labels = dialog_element.findChildren(
-                lambda x: x.roleName == "label" and x.showing and x.text, recursive=True
+                lambda x: x.roleName == "label" and x.showing and (x.text or x.name)
             )
 
-            # Concatenate label texts to form message
             message_parts = []
             for label in labels:
-                text = label.text.strip()
-                if text and len(text) > 1:  # Skip single-char labels
+                text = (label.text or label.name or "").strip()
+                if text and len(text) > 1:
                     message_parts.append(text)
 
             info["message"] = " ".join(message_parts)
 
             # Find all buttons (roleName is 'button', not 'push button')
-            buttons = dialog_element.findChildren(
-                lambda x: x.roleName == "button",  # Changed from 'push button'
-                recursive=True,
-            )
+            buttons = dialog_element.findChildren(lambda x: x.roleName == "button")
 
             for btn in buttons:
                 if btn.name:
                     info["buttons"].append({"text": btn.name, "element": btn})
 
         except Exception as e:
-            print(f"[Dialog] Error extracting dialog info: {e}")
+            log_and_print(f"[Dialog] Error extracting dialog info: {e}")
 
         return info
 
@@ -177,24 +183,26 @@ class DialogHandler:
         checks = 0
 
         app_filter = app_name or "none"
-        print(f"[Dialog] Searching for dialogs (timeout: {timeout}s, app filter: {app_filter})...")
+        log_and_print(
+            f"[Dialog] Searching for dialogs (timeout: {timeout}s, app filter: {app_filter})..."
+        )
 
         while time.time() - start_time < timeout:
             dialogs = self.find_dialogs(app_name=app_name)
             checks += 1
 
             if checks == 1 or checks % 10 == 0:
-                print(f"[Dialog] Check #{checks}: Found {len(dialogs)} dialog(s)")
+                log_and_print(f"[Dialog] Check #{checks}: Found {len(dialogs)} dialog(s)")
 
             for dialog in dialogs:
-                print(f"[Dialog]   - Dialog in '{dialog['app']}': '{dialog['name']}'")
+                log_and_print(f"[Dialog]   - Dialog in '{dialog['app']}': '{dialog['name']}'")
 
                 # Check if this looks like a save dialog
                 info = self.get_dialog_info(dialog["element"])
 
-                print(f"[Dialog]     Title: {info['title']}")
-                print(f"[Dialog]     Message: {info['message'][:80]}...")
-                print(f"[Dialog]     Buttons: {[btn['text'] for btn in info['buttons']]}")
+                log_and_print(f"[Dialog]     Title: {info['title']}")
+                log_and_print(f"[Dialog]     Message: {info['message'][:80]}...")
+                log_and_print(f"[Dialog]     Buttons: {[btn['text'] for btn in info['buttons']]}")
 
                 # Common keywords in save dialogs
                 save_keywords = [
@@ -213,15 +221,15 @@ class DialogHandler:
                 if any(kw in dialog_text for kw in save_keywords) or any(
                     kw in " ".join(button_texts) for kw in save_keywords
                 ):
-                    print("[Dialog]     ✅ MATCH! This looks like a save dialog")
+                    log_and_print("[Dialog]     ✅ MATCH! This looks like a save dialog")
                     self.last_dialog = {"dialog": dialog, "info": info}
                     return self.last_dialog
                 else:
-                    print("[Dialog]     Not a save dialog (no matching keywords)")
+                    log_and_print("[Dialog]     Not a save dialog (no matching keywords)")
 
             time.sleep(0.1)
 
-        print(f"[Dialog] No save dialog found after {checks} checks over {timeout}s")
+        log_and_print(f"[Dialog] No save dialog found after {checks} checks over {timeout}s")
         return None
 
     def describe_dialog(self, dialog_data: dict) -> str:
@@ -302,7 +310,7 @@ class DialogHandler:
             target_button = "cancel"
 
         if not target_button:
-            print(f"[Dialog] No keyboard shortcut found for: {button_choice}")
+            log_and_print(f"[Dialog] No keyboard shortcut found for: {button_choice}")
             return False
 
         shortcut = shortcuts[target_button]
@@ -310,7 +318,7 @@ class DialogHandler:
         # STRATEGY 1: Try keyboard shortcut (Alt+s/d/c)
         if key_callback:
             # Use provided keyboard callback (e.g., MCP client)
-            print(f"[Dialog] Trying keyboard shortcut via callback: {shortcut}")
+            log_and_print(f"[Dialog] Trying keyboard shortcut via callback: {shortcut}")
             key_callback(shortcut)
             time.sleep(0.5)
         else:
@@ -320,13 +328,13 @@ class DialogHandler:
 
             try:
                 dialog_element = dialog_data["dialog"]["element"]
-                print("[Dialog] Grabbing focus on dialog...")
+                log_and_print("[Dialog] Grabbing focus on dialog...")
                 dialog_element.grabFocus()
                 doDelay(0.2)
             except Exception as e:
-                print(f"[Dialog] Warning: Could not grab focus: {e}")
+                log_and_print(f"[Dialog] Warning: Could not grab focus: {e}")
 
-            print(f"[Dialog] Trying keyboard shortcut: <{shortcut.replace('+', '>')}")
+            log_and_print(f"[Dialog] Trying keyboard shortcut: <{shortcut.replace('+', '>')}")
             keyCombo(f"<{shortcut.replace('+', '>')}")
             doDelay(0.5)
 
@@ -334,27 +342,29 @@ class DialogHandler:
         if not self.verify_dialog_closed(dialog_data, timeout=0.5):
             if use_fallback:
                 # STRATEGY 2: Fallback to Tab/arrow navigation
-                print("[Dialog] Shortcut didn't work, using Tab/arrow fallback...")
+                log_and_print("[Dialog] Shortcut didn't work, using Tab/arrow fallback...")
 
                 if key_callback:
                     # Use callback for Tab/arrow navigation
-                    print("[Dialog] Pressing Tab to focus Discard button")
+                    log_and_print("[Dialog] Pressing Tab to focus Discard button")
                     key_callback("Tab")
                     time.sleep(0.2)
 
                     # Navigate to target button
                     if target_button == "save":
-                        print("[Dialog] Pressing Right arrow to move to Save button")
+                        log_and_print("[Dialog] Pressing Right arrow to move to Save button")
                         key_callback("Right")
                         time.sleep(0.2)
                     elif target_button == "cancel":
-                        print("[Dialog] Pressing Left arrow to move to Cancel button")
+                        log_and_print("[Dialog] Pressing Left arrow to move to Cancel button")
                         key_callback("Left")
                         time.sleep(0.2)
                     # For 'discard', we're already there after Tab
 
                     # Press Enter to activate
-                    print(f"[Dialog] Pressing Return to activate {target_button.title()} button")
+                    log_and_print(
+                        f"[Dialog] Pressing Return to activate {target_button.title()} button"
+                    )
                     key_callback("Return")
                     time.sleep(0.3)
                 else:
@@ -363,27 +373,29 @@ class DialogHandler:
                     from dogtail.utils import doDelay
 
                     # Tab once to select Discard button (middle)
-                    print("[Dialog] Pressing Tab to focus Discard button")
+                    log_and_print("[Dialog] Pressing Tab to focus Discard button")
                     pressKey("Tab")
                     doDelay(0.2)
 
                     # Navigate to target button
                     if target_button == "save":
-                        print("[Dialog] Pressing Right arrow to move to Save button")
+                        log_and_print("[Dialog] Pressing Right arrow to move to Save button")
                         pressKey("Right")
                         doDelay(0.2)
                     elif target_button == "cancel":
-                        print("[Dialog] Pressing Left arrow to move to Cancel button")
+                        log_and_print("[Dialog] Pressing Left arrow to move to Cancel button")
                         pressKey("Left")
                         doDelay(0.2)
                     # For 'discard', we're already there after Tab
 
                     # Press Enter to activate
-                    print(f"[Dialog] Pressing Enter to activate {target_button.title()} button")
+                    log_and_print(
+                        f"[Dialog] Pressing Enter to activate {target_button.title()} button"
+                    )
                     pressKey("Enter")
                     doDelay(0.3)
             else:
-                print("[Dialog] Shortcut may not have worked, fallback disabled")
+                log_and_print("[Dialog] Shortcut may not have worked, fallback disabled")
 
         return True
 
@@ -407,7 +419,7 @@ class DialogHandler:
             # Find matching button
             for btn in info["buttons"]:
                 if button_text_lower in btn["text"].lower():
-                    print(f"[Dialog] Clicking button: {btn['text']}")
+                    log_and_print(f"[Dialog] Clicking button: {btn['text']}")
                     btn["element"].click()
                     doDelay(0.3)
                     return True
@@ -423,16 +435,16 @@ class DialogHandler:
                 if button_text_lower in key or any(v in button_text_lower for v in variants):
                     for btn in info["buttons"]:
                         if any(v in btn["text"].lower() for v in variants):
-                            print(f"[Dialog] Clicking button: {btn['text']}")
+                            log_and_print(f"[Dialog] Clicking button: {btn['text']}")
                             btn["element"].click()
                             doDelay(0.3)
                             return True
 
-            print(f"[Dialog] No button found matching: {button_text}")
+            log_and_print(f"[Dialog] No button found matching: {button_text}")
             return False
 
         except Exception as e:
-            print(f"[Dialog] Error clicking button: {e}")
+            log_and_print(f"[Dialog] Error clicking button: {e}")
             return False
 
     def verify_dialog_closed(self, dialog_data: dict, timeout: float = 2.0) -> bool:
@@ -471,7 +483,7 @@ class DialogHandler:
 if __name__ == "__main__":
     print("Dialog Handler Test")
     print("=" * 60)
-    print("1. Open gnome-text-editor")
+    print("1. Open a text editor (gnome-text-editor, kwrite, kate)")
     print("2. Type some text")
     print("3. Try to close the window (Ctrl+Q or close button)")
     print("4. This script will detect and describe the save dialog\n")

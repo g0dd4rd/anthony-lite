@@ -4,13 +4,11 @@ from utils import log_and_print
 # Dependency injection (set via init())
 # ----------------------------------------
 _call_llama_server = None
-_debug = False
 
 
 def init(call_llama_server_fn, debug=False):
-    global _call_llama_server, _debug
+    global _call_llama_server
     _call_llama_server = call_llama_server_fn
-    _debug = debug
 
 
 def classify_intent_type(user_input: str) -> str:
@@ -73,14 +71,13 @@ def handle_conversation(user_input: str, conversation_history: list) -> tuple:
             if len(content) > 200:
                 content = content[:200] + "..."
             debug_lines.append(f"  [{role}]: {content}")
-        log_and_print("\n".join(debug_lines), level="debug", console=_debug)
+        log_and_print("\n".join(debug_lines), level="debug")
 
         response = _call_llama_server(messages=messages, temperature=0.7, max_tokens=500)
 
         log_and_print(
             f"[DEBUG] Response content length: {len(response['message'].get('content', ''))}",
             level="debug",
-            console=_debug,
         )
 
         answer = response["message"]["content"]

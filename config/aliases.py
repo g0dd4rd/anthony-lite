@@ -49,8 +49,16 @@ APP_SHORTCUT_ALIASES = {**_SHARED_ALIASES, **(_KDE_ALIASES if _is_kde else _GNOM
 
 
 # exec_name -> AT-SPI accessibility name
-# (discovered by tools/discover_a11y.py)
+# GNOME apps discovered by tools/discover_a11y.py
+# KDE apps register with their binary name
 APP_A11Y_NAMES = {
+    "dolphin": "dolphin",
+    "gwenview": "gwenview",
+    "kate": "kate",
+    "konsole": "konsole",
+    "kwrite": "kwrite",
+    "okular": "okular",
+    "spectacle": "spectacle",
     "accerciser": "accerciser",
     "baobab": "baobab",
     "dconf-editor": "dconf-editor",

@@ -28,8 +28,8 @@ def setup_logging(log_dir=None):
 
 
 def log_and_print(msg: str, level: str = "info", console: bool = True):
-    """Log to file always; print to terminal if console=True."""
+    """Log to file always; print to terminal based on level and DEBUG flag."""
     if logger:
         getattr(logger, level)(msg)
-    if console:
+    if console and (level != "debug" or DEBUG):
         print(msg)

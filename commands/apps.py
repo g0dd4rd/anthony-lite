@@ -1,8 +1,7 @@
-import json
-import os
 import subprocess
 
 from commands import _listen, _speak, step
+from commands.shortcuts import _shortcuts_data
 from config.aliases import APP_SHORTCUT_ALIASES
 from utils import log_and_print
 
@@ -251,18 +250,8 @@ def handle_uninstall(context, query):
 )
 def handle_shortcuts(context, app):
     app_lower = app.lower().strip()
-    shortcuts_dir = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "shortcuts"
-    )
-    json_path = os.path.join(shortcuts_dir, "app_shortcuts.json")
-    try:
-        with open(json_path) as f:
-            curated = json.load(f)
-    except Exception:
-        return f"No shortcuts found for '{app}'"
-
     lookup_key = APP_SHORTCUT_ALIASES.get(app_lower, app_lower)
-    app_shortcuts = curated.get(lookup_key, {})
+    app_shortcuts = _shortcuts_data.get(lookup_key, {})
     app_shortcuts = {k: v for k, v in app_shortcuts.items() if not k.startswith("_")}
 
     if not app_shortcuts:
