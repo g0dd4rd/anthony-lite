@@ -20,7 +20,10 @@ from queue import Queue
 if "KDE" in os.environ.get("XDG_CURRENT_DESKTOP", "").upper():
     os.environ.setdefault("QT_LINUX_ACCESSIBILITY_ALWAYS_ON", "1")
 
-import requests
+import http.client
+import json
+import socket as socket_mod
+
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
@@ -71,8 +74,8 @@ logger = utils.logger
 # MODEL CONFIGURATION - LLAMA.CPP SERVER
 # ========================================
 
-LLAMA_SERVER_URL = "http://127.0.0.1:8081/v1/chat/completions"
-LLAMA_SERVER_HEALTH_URL = "http://127.0.0.1:8081/health"
+_SOCKET_DIR = os.path.join(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}"), "anthony")
+LLAMA_SOCKET_PATH = os.path.join(_SOCKET_DIR, "llama.sock")
 MODEL_NAME = "gemma4"
 
 
@@ -144,8 +147,7 @@ _model_path, _mmproj_path = _find_model(_gpu_backend)
 LLAMA_SERVER_CONFIG = {
     "binary": os.path.expanduser("~/llama.cpp/build/bin/llama-server"),
     "model": _model_path,
-    "port": 8081,
-    "host": "127.0.0.1",
+    "socket_path": LLAMA_SOCKET_PATH,
     "ctx_size": 4096,
     "gpu_layers": 99 if _gpu_backend else 0,
     "threads": os.cpu_count() or 4,
@@ -164,6 +166,43 @@ elif _gpu_backend == "vulkan":
 # ========================================
 
 # ----------------------------------------
+# HTTP-over-Unix-Domain-Socket helpers
+# ----------------------------------------
+
+
+class _UnixHTTPConnection(http.client.HTTPConnection):
+    def __init__(self, socket_path, timeout=120):
+        super().__init__("localhost", timeout=timeout)
+        self._socket_path = socket_path
+
+    def connect(self):
+        self.sock = socket_mod.socket(socket_mod.AF_UNIX, socket_mod.SOCK_STREAM)
+        self.sock.settimeout(self.timeout)
+        self.sock.connect(self._socket_path)
+
+
+def post_unix(socket_path, path, payload, timeout=120):
+    conn = _UnixHTTPConnection(socket_path, timeout=timeout)
+    body = json.dumps(payload).encode()
+    conn.request("POST", path, body=body, headers={"Content-Type": "application/json"})
+    resp = conn.getresponse()
+    data = resp.read().decode()
+    conn.close()
+    if resp.status >= 400:
+        raise ConnectionError(f"HTTP {resp.status}: {data}")
+    return json.loads(data)
+
+
+def _get_unix(socket_path, path, timeout=2):
+    conn = _UnixHTTPConnection(socket_path, timeout=timeout)
+    conn.request("GET", path)
+    resp = conn.getresponse()
+    data = resp.read().decode()
+    conn.close()
+    return resp.status, json.loads(data)
+
+
+# ----------------------------------------
 # llama-server Lifecycle Management
 # ----------------------------------------
 
@@ -172,21 +211,18 @@ _server_process = None
 
 
 def check_server_running():
-    """Check if llama-server is responding"""
+    """Check if llama-server is responding on its Unix socket"""
     try:
-        response = requests.get(LLAMA_SERVER_HEALTH_URL, timeout=2)
-        return response.status_code == 200 and response.json().get("status") == "ok"
+        status, data = _get_unix(LLAMA_SOCKET_PATH, "/health", timeout=2)
+        return status == 200 and data.get("status") == "ok"
     except:
         return False
 
 
 def kill_server():
-    """Kill any running llama-server processes"""
+    """Kill any running llama-server processes and clean up the socket"""
     try:
-        # Find and kill llama-server processes
-        result = subprocess.run(
-            ["pgrep", "-f", "llama-server.*--port"], capture_output=True, text=True
-        )
+        result = subprocess.run(["pgrep", "-x", "llama-server"], capture_output=True, text=True)
         if result.stdout.strip():
             pids = result.stdout.strip().split("\n")
             for pid in pids:
@@ -195,8 +231,11 @@ def kill_server():
                     log_and_print(f"[SERVER] Killed llama-server process (PID {pid})")
                 except:
                     pass
-            # Wait for processes to die
             time.sleep(2)
+        try:
+            os.remove(LLAMA_SOCKET_PATH)
+        except FileNotFoundError:
+            pass
         return True
     except Exception as e:
         log_and_print(f"[SERVER] Warning: Could not kill server: {e}", level="warning")
@@ -204,12 +243,14 @@ def kill_server():
 
 
 def start_server():
-    """Start llama-server in detached background mode"""
+    """Start llama-server in detached background mode on a Unix socket"""
     global _server_process
 
     config = LLAMA_SERVER_CONFIG
 
-    # Build command
+    kill_server()
+    os.makedirs(_SOCKET_DIR, mode=0o700, exist_ok=True)
+
     cmd = [
         config["binary"],
         "--model",
@@ -218,10 +259,8 @@ def start_server():
         str(config["ctx_size"]),
         "--n-gpu-layers",
         str(config["gpu_layers"]),
-        "--port",
-        str(config["port"]),
         "--host",
-        config["host"],
+        config["socket_path"],
         "--threads",
         str(config["threads"]),
         "--parallel",
@@ -236,7 +275,7 @@ def start_server():
         cmd.extend(["--device", config["device"]])
 
     accel = config.get("device", "CPU")
-    log_and_print(f"[SERVER] Starting llama-server on port {config['port']}...")
+    log_and_print(f"[SERVER] Starting llama-server on {config['socket_path']}...")
     log_and_print(f"[SERVER] Model: {config['model']}")
     log_and_print(f"[SERVER] Acceleration: {accel} ({config['gpu_layers']} GPU layers)")
 
@@ -321,9 +360,7 @@ def call_llama_server(messages, tools=None, temperature=0.0, max_tokens=200):
         payload["tools"] = tools
 
     try:
-        response = requests.post(LLAMA_SERVER_URL, json=payload, timeout=120)
-        response.raise_for_status()
-        result = response.json()
+        result = post_unix(LLAMA_SOCKET_PATH, "/v1/chat/completions", payload, timeout=120)
 
         choice = result["choices"][0]
         message = choice["message"]
@@ -337,7 +374,7 @@ def call_llama_server(messages, tools=None, temperature=0.0, max_tokens=200):
             "eval_count": result.get("usage", {}).get("completion_tokens", 0),
         }
 
-    except requests.exceptions.RequestException as e:
+    except ConnectionError as e:
         log_and_print(f"[ERROR] llama-server request failed: {e}", level="error")
         raise
     except Exception as e:
@@ -726,7 +763,7 @@ def run_agent():
             log_and_print("[SYSTEM] Stopping llama-server (--kill-server flag)...")
             kill_server()
         else:
-            log_and_print("[SYSTEM] Note: llama-server is still running on port 8081")
+            log_and_print(f"[SYSTEM] Note: llama-server is still running on {LLAMA_SOCKET_PATH}")
             log_and_print(
                 "[SYSTEM] Reuse it on next run for faster startup, or kill with --kill-server flag"
             )
