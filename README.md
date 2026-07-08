@@ -20,12 +20,13 @@ This is the lightweight fork of [anthony](https://github.com/g0dd4rd/anthony), o
 git clone https://github.com/g0dd4rd/anthony-lite.git ~/anthony-lite
 cd ~/anthony-lite
 ./install.sh
+./download_model.sh
 ./orchestrator.py
 ```
 
-The install script handles system packages, Python dependencies, the Piper voice model, and anthony-mcp setup. First run downloads the Whisper STT model (~1.5GB) and Silero VAD (~2MB) automatically.
+The install script handles system packages, Python dependencies, llama.cpp, the Piper voice model, and anthony-mcp setup. First run downloads the Whisper STT model (~1.5GB) and Silero VAD (~2MB) automatically.
 
-llama-server with a Gemma 4 model must be running on port 8081 for conversation mode and vision features. See `start_llama_server.sh` for the recommended launch command.
+`download_model.sh` downloads the Gemma 4 E2B model and vision projector (~3.4GB total) from Unsloth -- no Hugging Face login required. Run `./download_model.sh -m e4b` for the larger E4B variant, or `./download_model.sh --help` for all options.
 
 ## Usage
 
