@@ -35,7 +35,6 @@ The script will:
 - `pyaudio` - Microphone recording
 - `sounddevice` - ALSA warning suppression
 - `numpy` - Numerical operations
-- `requests` - HTTP calls to llama-server
 - `webcolors` - Color name lookup for pick_color
 - `mcp` - Model Context Protocol client
 - `dogtail` - GNOME accessibility / dialog handling
@@ -66,7 +65,7 @@ sudo dnf install -y alsa-utils portaudio-devel python3-devel pipewire-utils play
 ### 2. Python Packages
 ```bash
 pip install sounddevice pyaudio faster-whisper piper-tts mcp torch numpy \
-    requests webcolors dogtail parse
+    webcolors dogtail parse
 ```
 
 ### 3. Anthony MCP
@@ -102,7 +101,7 @@ which python3 pip anthony-mcp aplay pactl playerctl
 
 # Check Python modules
 python3 -c "import sounddevice, pyaudio, faster_whisper, piper, mcp, torch, \
-    requests, webcolors, dogtail, parse"
+    webcolors, dogtail, parse"
 
 # Check Piper model
 ls -lh ~/anthony-lite/en_US-lessac-medium.onnx*
@@ -110,8 +109,8 @@ ls -lh ~/anthony-lite/en_US-lessac-medium.onnx*
 # Check accessibility
 gsettings get org.gnome.desktop.interface toolkit-accessibility
 
-# Check llama-server
-curl -s http://localhost:8081/health
+# Check llama-server (Unix socket)
+curl -s --unix-socket /run/user/$(id -u)/anthony/llama.sock http://localhost/health
 ```
 
 ## First Run
